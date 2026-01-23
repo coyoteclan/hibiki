@@ -105,9 +105,18 @@ impl RoutingEngine {
         (self.capture_state, self.focus_state)
     }
 
-    pub fn update_config(&mut self, capture_hotkey: &str, focus_hotkey: &str) {
+    pub fn update_config(
+        &mut self,
+        capture_hotkey: &str,
+        focus_hotkey: &str,
+        pause_hotkey: &str,
+        toggle_focus_hotkey: &str,
+    ) {
         self.hotkey_manager.set_capture_hotkey(capture_hotkey);
         self.hotkey_manager.set_focus_hotkey(focus_hotkey);
+        self.hotkey_manager.set_pause_hotkey(pause_hotkey);
+        self.hotkey_manager
+            .set_toggle_focus_hotkey(toggle_focus_hotkey);
     }
 
     pub fn reset_hotkey_state(&mut self) {

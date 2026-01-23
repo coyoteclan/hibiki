@@ -80,6 +80,7 @@ impl App {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn activate_without_tray(app: &Application, config_service: ConfigService) {
     info!("Activating keystroke application (no tray)");
 
@@ -87,10 +88,15 @@ fn activate_without_tray(app: &Application, config_service: ConfigService) {
     state.borrow_mut().feedback_service = Some(FeedbackService::new(app));
     
     let config = config_service.get_config();
-    state.borrow_mut().routing_engine.update_config(
-        &config.keystroke_hotkey, 
-        &config.bubble_hotkey
-    );
+    {
+        let mut s = state.borrow_mut();
+        s.routing_engine.update_config(
+            &config.keystroke_hotkey, 
+            &config.bubble_hotkey,
+            &config.pause_hotkey,
+            &config.toggle_focus_hotkey
+        );
+    }
 
     load_css_defaults();
 
@@ -108,11 +114,17 @@ fn activate(
     let state = Rc::new(RefCell::new(RuntimeState::default()));
     state.borrow_mut().feedback_service = Some(FeedbackService::new(app));
     
+    // Initialize RoutingEngine config
     let config = config_service.get_config();
-    state.borrow_mut().routing_engine.update_config(
-        &config.keystroke_hotkey, 
-        &config.bubble_hotkey
-    );
+    {
+        let mut s = state.borrow_mut();
+        s.routing_engine.update_config(
+            &config.keystroke_hotkey, 
+            &config.bubble_hotkey,
+            &config.pause_hotkey,
+            &config.toggle_focus_hotkey
+        );
+    }
 
     load_css_defaults();
 
@@ -126,6 +138,7 @@ fn activate(
         tray_handle,
     );
 }
+
 
 fn setup_launcher_and_modes(
     app: &Application,
@@ -308,6 +321,7 @@ fn open_settings(
     show_settings(&settings_window);
 }
 
+#[allow(clippy::too_many_lines)]
 fn start_keystroke_mode(
     app: &Application,
     config_service: &ConfigService,
@@ -380,12 +394,11 @@ fn start_keystroke_mode(
             };
 
             match routing_result {
-                RoutingResult::Ignored => continue,
+                RoutingResult::Ignored => {},
                 RoutingResult::StateChanged(capture, focus) => {
                     if let Some(service) = &state_clone.borrow().feedback_service {
                         service.handle_state_change(capture, focus);
                     }
-                    continue;
                 }
                 RoutingResult::SwitchMode(mode) => {
                     let app = app_clone.clone();
@@ -425,7 +438,9 @@ fn start_keystroke_mode(
             
             state_c.borrow_mut().routing_engine.update_config(
                 &cfg.keystroke_hotkey, 
-                &cfg.bubble_hotkey
+                &cfg.bubble_hotkey,
+                &cfg.pause_hotkey,
+                &cfg.toggle_focus_hotkey
             );
 
             {
@@ -468,6 +483,7 @@ fn start_keystroke_mode(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn start_bubble_mode(
     app: &Application,
     config_service: &ConfigService,
@@ -585,7 +601,7 @@ fn start_bubble_mode(
             };
 
             match routing_result {
-                RoutingResult::Ignored => continue,
+                RoutingResult::Ignored => {},
                 RoutingResult::StateChanged(capture, focus) => {
                     if let Some(handle) = &state_clone.borrow().listener_handle {
                         if capture == CaptureState::Active
@@ -600,8 +616,6 @@ fn start_bubble_mode(
                     if let Some(service) = &state_clone.borrow().feedback_service {
                         service.handle_state_change(capture, focus);
                     }
-
-                    continue;
                 }
                 RoutingResult::SwitchMode(mode) => {
                     let app = app.clone();
@@ -673,7 +687,9 @@ fn start_bubble_mode(
             
             state_c.borrow_mut().routing_engine.update_config(
                 &cfg.keystroke_hotkey, 
-                &cfg.bubble_hotkey
+                &cfg.bubble_hotkey,
+                &cfg.pause_hotkey,
+                &cfg.toggle_focus_hotkey
             );
 
             {
@@ -794,7 +810,7 @@ fn load_css_defaults() {
     
     let bubble_css = include_str!("../style/bubble.css");
 
-    provider.load_from_string(&format!("{}\n{}\n{}", defaults, settings, bubble_css));
+    provider.load_from_string(&format!("{defaults}\n{settings}\n{bubble_css}"));
 
     if let Some(display) = gtk4::gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(

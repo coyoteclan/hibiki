@@ -2,7 +2,6 @@ use keystroke::application::config_service::ConfigService;
 use keystroke::domain::config::{KeystrokeConfig, Position};
 use keystroke::infrastructure::settings_repository::SettingsRepository;
 use std::fs;
-use std::time::Duration;
 
 #[tokio::test]
 async fn test_config_service_updates() {

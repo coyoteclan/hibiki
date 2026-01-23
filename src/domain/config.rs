@@ -30,6 +30,7 @@ pub enum Position {
 }
 
 impl Position {
+    #[must_use]
     pub fn layer_shell_edges(self) -> Vec<(Edge, bool)> {
         match self {
             Position::TopLeft => vec![
@@ -92,6 +93,7 @@ impl Position {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct KeystrokeConfig {
     pub display_mode: DisplayMode,
 
