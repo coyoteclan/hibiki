@@ -211,6 +211,10 @@ impl BubbleDisplayWidget {
         widget
     }
 
+    pub fn set_display_duration(&mut self, timeout_ms: u64) {
+        self.display_duration = Duration::from_millis(timeout_ms);
+    }
+
     pub fn set_layout(&mut self, layout_name: &str) {
         self.xkb_state.set_layout(layout_name);
     }

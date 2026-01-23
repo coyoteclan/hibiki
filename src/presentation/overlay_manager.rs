@@ -63,7 +63,7 @@ impl OverlayManager {
         self.window.set_visible(true);
 
         if let Some(source) = self.active_source.borrow_mut().take() {
-            let _ = source.remove();
+            source.remove();
         }
 
         let window = self.window.clone();

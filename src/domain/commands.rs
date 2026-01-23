@@ -1,8 +1,10 @@
 use super::state::{CaptureState, FocusState};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    ToggleCapture,
+    ActivateKeystrokeMode,
+    ActivateBubbleMode,
+    TogglePause,
     ToggleFocus,
     SetCaptureState(CaptureState),
     SetFocusState(FocusState),

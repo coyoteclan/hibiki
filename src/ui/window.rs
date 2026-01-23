@@ -1,4 +1,4 @@
-use crate::config::{Config, Position};
+use crate::domain::config::{KeystrokeConfig as Config, Position};
 use anyhow::Result;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, CssProvider};
@@ -68,6 +68,10 @@ fn apply_css(window: &ApplicationWindow, config: &Config) {
 
 #[allow(dead_code)]
 pub fn update_position(window: &ApplicationWindow, position: Position, margin: i32) {
+    info!(
+        "Updating window position to: {:?} with margin {}",
+        position, margin
+    );
     for (edge, anchor) in position.layer_shell_edges() {
         window.set_anchor(edge, anchor);
     }
@@ -76,6 +80,8 @@ pub fn update_position(window: &ApplicationWindow, position: Position, margin: i
     window.set_margin(Edge::Bottom, margin);
     window.set_margin(Edge::Left, margin);
     window.set_margin(Edge::Right, margin);
+
+    window.queue_resize();
 }
 
 pub fn create_bubble_window(app: &Application, config: &Config) -> Result<ApplicationWindow> {

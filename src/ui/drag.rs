@@ -23,7 +23,8 @@ impl Default for DragState {
     }
 }
 
-pub fn setup_drag(window: &ApplicationWindow) {
+pub fn setup_drag(window: &ApplicationWindow) -> Vec<gtk4::EventController> {
+
     window.set_anchor(Edge::Top, true);
     window.set_anchor(Edge::Left, true);
     window.set_anchor(Edge::Bottom, false);
@@ -31,6 +32,8 @@ pub fn setup_drag(window: &ApplicationWindow) {
 
     window.set_margin(Edge::Left, DEFAULT_MARGIN_X);
     window.set_margin(Edge::Top, DEFAULT_MARGIN_Y);
+
+    let mut controllers = Vec::new();
 
     let drag_state = Rc::new(DragState::default());
 
@@ -69,7 +72,8 @@ pub fn setup_drag(window: &ApplicationWindow) {
         debug!("Drag ended with offset ({}, {})", offset_x, offset_y);
     });
 
-    window.add_controller(gesture);
+    window.add_controller(gesture.clone());
+    controllers.push(gesture.upcast());
 
     let click = GestureClick::new();
     click.set_button(1);
@@ -81,5 +85,8 @@ pub fn setup_drag(window: &ApplicationWindow) {
             win.set_margin(Edge::Top, DEFAULT_MARGIN_Y);
         }
     });
-    window.add_controller(click);
+    window.add_controller(click.clone());
+    controllers.push(click.upcast());
+
+    controllers
 }

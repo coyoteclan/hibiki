@@ -1,16 +1,7 @@
-mod app;
-pub mod application;
-pub mod compositor;
-mod config;
-pub mod domain;
-pub mod infrastructure;
-mod input;
-mod presentation;
-mod tray;
-mod ui;
-
 use anyhow::Result;
-use config::Config;
+use keystroke::application::config_service::ConfigService;
+use keystroke::infrastructure::settings_repository::SettingsRepository;
+use keystroke::{app, compositor, input, tray};
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -22,12 +13,9 @@ fn main() -> Result<()> {
     let compositor = compositor::detect();
     info!("Detected compositor: {}", compositor);
 
-    let config = Config::load().unwrap_or_else(|e| {
-        warn!("Failed to load config: {}, using defaults", e);
-        Config::default()
-    });
-
-    config.validate()?;
+    let settings_repo = SettingsRepository::new()?;
+    let config_service = ConfigService::new(settings_repo)?;
+    let config = config_service.get_config();
 
     info!("Configuration loaded: {:?}", config.position);
 
@@ -44,14 +32,14 @@ fn main() -> Result<()> {
         Ok((tray_rx, tray_handle)) => {
             info!("System tray started successfully");
 
-            let app = app::App::new(config);
+            let app = app::App::new(config_service);
             let exit_code = app.run_with_tray(tray_rx, tray_handle);
             std::process::exit(exit_code);
         }
         Err(e) => {
             warn!("Failed to start system tray: {}, running without tray", e);
 
-            let app = app::App::new(config);
+            let app = app::App::new(config_service);
             let exit_code = app.run();
             std::process::exit(exit_code);
         }

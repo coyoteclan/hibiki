@@ -8,6 +8,12 @@ pub struct OsdBubble {
     label: Label,
 }
 
+impl Default for OsdBubble {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OsdBubble {
     pub fn new() -> Self {
         let container = GtkBox::builder()
