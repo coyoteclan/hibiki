@@ -1,6 +1,11 @@
+use crate::application::feedback_service::FeedbackService;
+use crate::application::routing::{RoutingEngine, RoutingResult};
 use crate::compositor::LayoutEvent;
 use crate::config::Config;
-use crate::input::{KeyEvent, KeyListener, LayoutManager, ListenerConfig, ListenerHandle};
+use crate::domain::CaptureState;
+use crate::input::{
+    InputControlCommand, KeyEvent, KeyListener, LayoutManager, ListenerConfig, ListenerHandle,
+};
 use crate::tray::{TrayAction, TrayHandle};
 use crate::ui::{
     create_bubble_window, create_launcher_window, create_settings_window, create_window,
@@ -27,7 +32,7 @@ pub struct App {
 #[derive(Default)]
 struct RuntimeState {
     mode: Option<DisplayMode>,
-    paused: bool,
+    routing_engine: RoutingEngine,
     keystroke_window: Option<ApplicationWindow>,
     bubble_window: Option<ApplicationWindow>,
     launcher_window: Option<ApplicationWindow>,
@@ -35,6 +40,7 @@ struct RuntimeState {
     mode_active: Option<Arc<AtomicBool>>,
     listener_handle: Option<ListenerHandle>,
     layout_manager: Option<LayoutManager>,
+    feedback_service: Option<FeedbackService>,
 }
 
 impl App {
@@ -78,6 +84,7 @@ fn activate_without_tray(app: &Application, config: &Config) {
     info!("Activating keystroke application (no tray)");
 
     let state = Rc::new(RefCell::new(RuntimeState::default()));
+    state.borrow_mut().feedback_service = Some(FeedbackService::new(app));
     let config = Rc::new(RefCell::new(config.clone()));
 
     load_css_defaults();
@@ -94,6 +101,7 @@ fn activate(
     info!("Activating keystroke application");
 
     let state = Rc::new(RefCell::new(RuntimeState::default()));
+    state.borrow_mut().feedback_service = Some(FeedbackService::new(app));
     let config = Rc::new(RefCell::new(config.clone()));
 
     load_css_defaults();
@@ -224,7 +232,31 @@ fn handle_tray_action(
         }
         TrayAction::TogglePause => {
             debug!("Handling TogglePause action");
-            let paused = toggle_pause(state);
+            let mut s = state.borrow_mut();
+            let new_state = s.routing_engine.toggle_capture();
+            let paused = new_state == CaptureState::Paused;
+
+            if let Some(w) = &s.keystroke_window {
+                if paused {
+                    w.add_css_class("paused");
+                } else {
+                    w.remove_css_class("paused");
+                }
+            }
+
+            if let Some(w) = &s.bubble_window {
+                if paused {
+                    w.add_css_class("paused");
+                } else {
+                    w.remove_css_class("paused");
+                }
+            }
+
+            if let Some(service) = &s.feedback_service {
+                service.handle_state_change(new_state, s.routing_engine.get_states().1);
+            }
+
+            drop(s);
             tray_handle.set_paused(paused);
             info!(
                 "Keystroke capture {}",
@@ -301,6 +333,7 @@ fn start_keystroke_mode(
     let listener = KeyListener::new(sender, listener_config);
     let handle = listener.start()?;
 
+
     let mode_active = Arc::new(AtomicBool::new(true));
     {
         let mut s = state.borrow_mut();
@@ -319,20 +352,43 @@ fn start_keystroke_mode(
                 break;
             }
 
-            if state_clone.borrow().paused {
-                continue;
-            }
+            let routing_result = match &event {
+                KeyEvent::Pressed(kd) => state_clone
+                    .borrow_mut()
+                    .routing_engine
+                    .process(kd.key, true, false),
+                KeyEvent::Released(kd) => state_clone
+                    .borrow_mut()
+                    .routing_engine
+                    .process(kd.key, false, false),
+                KeyEvent::AllReleased => RoutingResult::Dispatch(evdev::Key::KEY_RESERVED, false),
+            };
 
-            let mut display = display_clone.borrow_mut();
-            match event {
-                KeyEvent::Pressed(key) => {
-                    display.add_key(key);
+            match routing_result {
+                RoutingResult::Ignored => continue,
+                RoutingResult::StateChanged(capture, focus) => {
+                    info!("State changed: Capture={:?}, Focus={:?}", capture, focus);
+
+
+                    if let Some(service) = &state_clone.borrow().feedback_service {
+                        service.handle_state_change(capture, focus);
+                    }
+
+                    continue;
                 }
-                KeyEvent::Released(key) => {
-                    display.remove_key(&key);
-                }
-                KeyEvent::AllReleased => {
-                    display.clear();
+                RoutingResult::Dispatch(_, _) => {
+                    let mut display = display_clone.borrow_mut();
+                    match event {
+                        KeyEvent::Pressed(key) => {
+                            display.add_key(key);
+                        }
+                        KeyEvent::Released(key) => {
+                            display.remove_key(&key);
+                        }
+                        KeyEvent::AllReleased => {
+                            display.clear();
+                        }
+                    }
                 }
             }
         }
@@ -408,6 +464,14 @@ fn start_bubble_mode(
     let listener = KeyListener::new(sender, listener_config);
     let handle = listener.start()?;
 
+    {
+        let s = state.borrow();
+        let (capture, focus) = s.routing_engine.get_states();
+        if capture == CaptureState::Active && focus == crate::domain::FocusState::Focused {
+            handle.send_command(InputControlCommand::Grab);
+        }
+    }
+
     let mode_active = Arc::new(AtomicBool::new(true));
     {
         let mut s = state.borrow_mut();
@@ -427,19 +491,51 @@ fn start_bubble_mode(
                 break;
             }
 
-            if state_clone.borrow().paused {
-                continue;
-            }
+            let routing_result = match &event {
+                KeyEvent::Pressed(kd) => state_clone
+                    .borrow_mut()
+                    .routing_engine
+                    .process(kd.key, true, true),
+                KeyEvent::Released(kd) => state_clone
+                    .borrow_mut()
+                    .routing_engine
+                    .process(kd.key, false, true),
+                KeyEvent::AllReleased => RoutingResult::Dispatch(evdev::Key::KEY_RESERVED, false),
+            };
 
-            let mut display = display_clone.borrow_mut();
-            match event {
-                KeyEvent::Pressed(key) => {
-                    display.process_key(key);
+            match routing_result {
+                RoutingResult::Ignored => continue,
+                RoutingResult::StateChanged(capture, focus) => {
+                    info!("State changed: Capture={:?}, Focus={:?}", capture, focus);
+
+                    if let Some(handle) = &state_clone.borrow().listener_handle {
+                        if capture == CaptureState::Active
+                            && focus == crate::domain::FocusState::Focused
+                        {
+                            handle.send_command(InputControlCommand::Grab);
+                        } else {
+                            handle.send_command(InputControlCommand::Ungrab);
+                        }
+                    }
+
+                    if let Some(service) = &state_clone.borrow().feedback_service {
+                        service.handle_state_change(capture, focus);
+                    }
+
+                    continue;
                 }
-                KeyEvent::Released(key) => {
-                    display.process_key_release(key);
+                RoutingResult::Dispatch(_, _) => {
+                    let mut display = display_clone.borrow_mut();
+                    match event {
+                        KeyEvent::Pressed(key) => {
+                            display.process_key(key);
+                        }
+                        KeyEvent::Released(key) => {
+                            display.process_key_release(key);
+                        }
+                        KeyEvent::AllReleased => {}
+                    }
                 }
-                KeyEvent::AllReleased => {}
             }
         }
         debug!("Bubble event loop terminated");
@@ -454,7 +550,7 @@ fn start_bubble_mode(
             if !active.load(Ordering::SeqCst) {
                 break;
             }
-            if state_clone.borrow().paused {
+            if state_clone.borrow().routing_engine.get_states().0 == CaptureState::Paused {
                 continue;
             }
 
@@ -489,7 +585,7 @@ fn setup_keystroke_cleanup_timer(
             return ControlFlow::Break;
         }
 
-        if state.borrow().paused {
+        if state.borrow().routing_engine.get_states().0 == CaptureState::Paused {
             return ControlFlow::Continue;
         }
 
@@ -525,7 +621,7 @@ fn setup_bubble_cleanup_timer(
             return ControlFlow::Break;
         }
 
-        if state.borrow().paused {
+        if state.borrow().routing_engine.get_states().0 == CaptureState::Paused {
             return ControlFlow::Continue;
         }
 
@@ -550,19 +646,18 @@ fn setup_bubble_cleanup_timer(
     });
 }
 
-fn toggle_pause(state: &Rc<RefCell<RuntimeState>>) -> bool {
-    let mut s = state.borrow_mut();
-    s.paused = !s.paused;
-    s.paused
-}
-
 fn load_css_defaults() {
     let provider = gtk4::CssProvider::new();
     let defaults = include_str!("../style/defaults.css");
     let settings = include_str!("../style/settings.css");
     
-    // Load defaults and settings CSS
-    provider.load_from_string(&format!("{}\n{}", defaults, settings));
+    let bubble_css = if cfg!(debug_assertions) {
+        include_str!("../style/bubble.css")
+    } else {
+        include_str!("../style/bubble.css")
+    };
+
+    provider.load_from_string(&format!("{}\n{}\n{}", defaults, settings, bubble_css));
 
     if let Some(display) = gtk4::gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(

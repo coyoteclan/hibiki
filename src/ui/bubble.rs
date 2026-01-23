@@ -279,7 +279,12 @@ impl BubbleDisplayWidget {
                 }
             }
             BubbleInput::NewLine => {
-                if self.bubbles.back().is_some_and(|b| !b.is_empty()) {
+                if self.xkb_state.is_shift_active() {
+                    self.ensure_active_bubble();
+                    if let Some(bubble) = self.bubbles.back_mut() {
+                        bubble.append_char('\n');
+                    }
+                } else if self.bubbles.back().is_some_and(|b| !b.is_empty()) {
                     self.want_new_bubble = true;
                 }
             }

@@ -25,3 +25,11 @@
 @define-color window_fg_color #ffffff;
 @define-color purple_3 #9141ac;
 @define-color pink_3 #d56199;
+
+.unfocused {
+    opacity: 0.5;
+}
+
+.paused {
+    opacity: 0.3;
+}

@@ -1,0 +1,17 @@
+.osd-window {
+    background-color: transparent;
+}
+
+.osd-bubble {
+    background-color: #000000;
+    border-radius: 24px;
+    padding: 12px 24px;
+    margin: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.osd-label {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: bold;
+}

@@ -1,0 +1,20 @@
+.bubble-window {
+    background-color: transparent;
+}
+
+.bubble-window.paused .bubble {
+    color: #888888;
+}
+
+.bubble-window.unfocused .bubble {
+    opacity: 0.5;
+}
+
+.bubble {
+    background-color: #303030;
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-size: 16px;
+    margin-bottom: 4px;
+}

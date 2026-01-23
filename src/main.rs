@@ -1,7 +1,11 @@
 mod app;
+pub mod application;
 pub mod compositor;
 mod config;
+pub mod domain;
+pub mod infrastructure;
 mod input;
+mod presentation;
 mod tray;
 mod ui;
 

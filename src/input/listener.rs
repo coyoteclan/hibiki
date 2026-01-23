@@ -1,7 +1,7 @@
 use crate::input::device::{discover_keyboards, KeyboardDevice};
 use crate::input::keymap::KeyDisplay;
 use anyhow::{Context, Result};
-use async_channel::{Sender, TrySendError};
+use async_channel::{Receiver, Sender, TrySendError};
 use evdev::{Device, InputEventKind, Key};
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 use std::collections::HashSet;
@@ -17,6 +17,12 @@ pub enum KeyEvent {
     Released(KeyDisplay),
     #[allow(dead_code)]
     AllReleased,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputControlCommand {
+    Grab,
+    Ungrab,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +42,15 @@ impl Default for ListenerConfig {
 
 pub struct ListenerHandle {
     running: Arc<AtomicBool>,
+    control_tx: Sender<InputControlCommand>,
+}
+
+impl ListenerHandle {
+    pub fn send_command(&self, cmd: InputControlCommand) {
+        if let Err(e) = self.control_tx.try_send(cmd) {
+            warn!("Failed to send input control command: {}", e);
+        }
+    }
 }
 
 impl Drop for ListenerHandle {
@@ -73,14 +88,18 @@ impl KeyListener {
         };
 
         self.running.store(true, Ordering::SeqCst);
+        let (control_tx, control_rx) = async_channel::unbounded::<InputControlCommand>();
 
         for keyboard in devices_to_use {
             let sender = self.sender.clone();
             let running = Arc::clone(&self.running);
             let ignored_keys = self.config.ignored_keys.clone();
+            let control_rx = control_rx.clone();
 
             thread::spawn(move || {
-                if let Err(e) = listen_to_device(keyboard, sender, running, ignored_keys) {
+                if let Err(e) =
+                    listen_to_device(keyboard, sender, running, ignored_keys, control_rx)
+                {
                     error!("Keyboard listener error: {}", e);
                 }
             });
@@ -88,6 +107,7 @@ impl KeyListener {
 
         Ok(ListenerHandle {
             running: self.running.clone(),
+            control_tx,
         })
     }
 
@@ -107,6 +127,7 @@ fn listen_to_device(
     sender: Sender<KeyEvent>,
     running: Arc<AtomicBool>,
     ignored_keys: HashSet<Key>,
+    control_rx: Receiver<InputControlCommand>,
 ) -> Result<()> {
     let mut device = keyboard.open()?;
     info!("Listening to keyboard: {}", keyboard.name);
@@ -116,8 +137,50 @@ fn listen_to_device(
     let borrowed_fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
     let mut poll_fds = [PollFd::new(borrowed_fd, PollFlags::POLLIN)];
     let mut pressed_keys = HashSet::new();
+    let mut is_grabbed = false;
+    let mut pending_grab = false;
 
     while running.load(Ordering::SeqCst) {
+        while let Ok(cmd) = control_rx.try_recv() {
+            match cmd {
+                InputControlCommand::Grab => {
+                    if !is_grabbed {
+                        if pressed_keys.is_empty() {
+                            match device.grab() {
+                                Ok(_) => {
+                                    info!("Grabbed keyboard: {}", keyboard.name);
+                                    is_grabbed = true;
+                                    pending_grab = false;
+                                }
+                                Err(e) => {
+                                    error!("Failed to grab keyboard {}: {}", keyboard.name, e)
+                                }
+                            }
+                        } else {
+                            info!(
+                                "Deferring grab for {} until {} keys are released",
+                                keyboard.name,
+                                pressed_keys.len()
+                            );
+                            pending_grab = true;
+                        }
+                    }
+                }
+                InputControlCommand::Ungrab => {
+                    pending_grab = false;
+                    if is_grabbed {
+                        match device.ungrab() {
+                            Ok(_) => {
+                                info!("Ungrabbed keyboard: {}", keyboard.name);
+                                is_grabbed = false;
+                            }
+                            Err(e) => error!("Failed to ungrab keyboard {}: {}", keyboard.name, e),
+                        }
+                    }
+                }
+            }
+        }
+
         let poll_result = poll(&mut poll_fds, PollTimeout::from(100_u16));
 
         match poll_result {
@@ -131,12 +194,33 @@ fn listen_to_device(
                     }
                     warn!("Error processing events: {}", e);
                 }
+
+                if pending_grab && !is_grabbed && pressed_keys.is_empty() {
+                    match device.grab() {
+                        Ok(_) => {
+                            info!("Executing pending grab for: {}", keyboard.name);
+                            is_grabbed = true;
+                            pending_grab = false;
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to execute pending grab for {}: {}",
+                                keyboard.name, e
+                            );
+                            pending_grab = false;
+                        }
+                    }
+                }
             }
             Err(e) => {
                 error!("Poll error: {}", e);
                 break;
             }
         }
+    }
+
+    if is_grabbed {
+        let _ = device.ungrab();
     }
 
     info!("Stopped listening to keyboard: {}", keyboard.name);
@@ -222,8 +306,10 @@ mod tests {
     #[test]
     fn test_listener_handle_drop() {
         let running = Arc::new(AtomicBool::new(true));
+        let (control_tx, _) = bounded(1);
         let handle = ListenerHandle {
             running: running.clone(),
+            control_tx,
         };
 
         assert!(running.load(Ordering::SeqCst));
