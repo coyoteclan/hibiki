@@ -9,6 +9,7 @@ use tracing::debug;
 const LOGO_SVG: &[u8] = include_bytes!("../assets/logo-symbolic.svg");
 
 const LAUNCHER_CSS: &str = include_str!("../../style/launcher.css");
+const DEFAULTS_CSS: &str = include_str!("../../style/defaults.css");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayMode {
@@ -40,7 +41,8 @@ pub fn create_launcher_window(
 
 fn apply_launcher_css(window: &ApplicationWindow) {
     let provider = CssProvider::new();
-    provider.load_from_string(LAUNCHER_CSS);
+    let css = format!("{}\n{}", DEFAULTS_CSS, LAUNCHER_CSS);
+    provider.load_from_string(&css);
 
     let display = gtk4::prelude::WidgetExt::display(window);
     gtk4::style_context_add_provider_for_display(

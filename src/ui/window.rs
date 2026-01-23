@@ -6,11 +6,12 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use tracing::info;
 
 fn generate_overlay_css(keystroke_font_size: f64, bubble_font_size: f64) -> String {
-    format!(
+    let overlay = format!(
         include_str!("../../style/overlay.css"),
         keystroke_font_size = keystroke_font_size,
         bubble_font_size = bubble_font_size
-    )
+    );
+    format!("{}\n{}", include_str!("../../style/defaults.css"), overlay)
 }
 
 pub fn create_window(app: &Application, config: &Config) -> Result<ApplicationWindow> {

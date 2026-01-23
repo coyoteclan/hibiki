@@ -48,11 +48,7 @@ impl App {
     }
 
     #[must_use]
-    pub fn run_with_tray(
-        self,
-        tray_rx: Receiver<TrayAction>,
-        tray_handle: TrayHandle,
-    ) -> i32 {
+    pub fn run_with_tray(self, tray_rx: Receiver<TrayAction>, tray_handle: TrayHandle) -> i32 {
         let config = self.config.clone();
 
         self.gtk_app.connect_activate(move |app| {
@@ -84,6 +80,8 @@ fn activate_without_tray(app: &Application, config: &Config) {
     let state = Rc::new(RefCell::new(RuntimeState::default()));
     let config = Rc::new(RefCell::new(config.clone()));
 
+    load_css_defaults();
+
     setup_launcher_and_modes(app, &state, &config);
 }
 
@@ -97,6 +95,8 @@ fn activate(
 
     let state = Rc::new(RefCell::new(RuntimeState::default()));
     let config = Rc::new(RefCell::new(config.clone()));
+
+    load_css_defaults();
 
     setup_launcher_and_modes(app, &state, &config);
 
@@ -554,4 +554,21 @@ fn toggle_pause(state: &Rc<RefCell<RuntimeState>>) -> bool {
     let mut s = state.borrow_mut();
     s.paused = !s.paused;
     s.paused
+}
+
+fn load_css_defaults() {
+    let provider = gtk4::CssProvider::new();
+    let defaults = include_str!("../style/defaults.css");
+    let settings = include_str!("../style/settings.css");
+    
+    // Load defaults and settings CSS
+    provider.load_from_string(&format!("{}\n{}", defaults, settings));
+
+    if let Some(display) = gtk4::gdk::Display::default() {
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
 }

@@ -27,6 +27,9 @@ pub enum Position {
     TopLeft,
     TopCenter,
     TopRight,
+    MiddleLeft,
+    Center,
+    MiddleRight,
     BottomLeft,
     #[default]
     BottomCenter,
@@ -50,6 +53,24 @@ impl Position {
             ],
             Position::TopRight => vec![
                 (Edge::Top, true),
+                (Edge::Left, false),
+                (Edge::Bottom, false),
+                (Edge::Right, true),
+            ],
+            Position::MiddleLeft => vec![
+                (Edge::Top, false),
+                (Edge::Left, true),
+                (Edge::Bottom, false),
+                (Edge::Right, false),
+            ],
+            Position::Center => vec![
+                (Edge::Top, false),
+                (Edge::Left, false),
+                (Edge::Bottom, false),
+                (Edge::Right, false),
+            ],
+            Position::MiddleRight => vec![
+                (Edge::Top, false),
                 (Edge::Left, false),
                 (Edge::Bottom, false),
                 (Edge::Right, true),

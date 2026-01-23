@@ -1,26 +1,25 @@
 use crate::config::{Config, Position};
 use gtk4::prelude::*;
 use gtk4::{
-    Adjustment, Application, ApplicationWindow, Box as GtkBox, Button, ColorDialog,
-    ColorDialogButton, CssProvider, DropDown, Entry, Label, Orientation, Scale, SpinButton, Stack,
-    StackSidebar, StringList, Switch,
+    Align, Application, ApplicationWindow, Box as GtkBox, Button, DropDown, Entry, HeaderBar,
+    Label, ListBox, ListBoxRow, Orientation, Scale, ScrolledWindow, SelectionMode, Separator,
+    Stack, StringList, Switch, ToggleButton,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
 use tracing::{debug, info};
 
-const SETTINGS_CSS: &str = include_str!("../../style/settings.css");
-
-const POSITION_OPTIONS: [(&str, Position); 6] = [
+const POSITION_OPTIONS: [(&str, Position); 9] = [
     ("Top Left", Position::TopLeft),
     ("Top Center", Position::TopCenter),
     ("Top Right", Position::TopRight),
+    ("Middle Left", Position::MiddleLeft),
+    ("Center", Position::Center),
+    ("Middle Right", Position::MiddleRight),
     ("Bottom Left", Position::BottomLeft),
     ("Bottom Center", Position::BottomCenter),
     ("Bottom Right", Position::BottomRight),
 ];
-
-const THEME_OPTIONS: [&str; 3] = ["Light", "Dark", "System"];
 
 pub fn create_settings_window(
     app: &Application,
@@ -30,88 +29,128 @@ pub fn create_settings_window(
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Settings")
-        .default_width(900)
-        .default_height(650)
+        .default_width(1100)
+        .default_height(750)
         .resizable(true)
         .build();
 
-    apply_settings_css(&window);
-    window.add_css_class("settings-window");
+    // Main layout: Horizontal box replacing NavigationSplitView
+    let main_box = GtkBox::new(Orientation::Horizontal, 0);
 
-    let main_box = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
+    // Sidebar
+    let sidebar_box = GtkBox::new(Orientation::Vertical, 0);
+    sidebar_box.set_width_request(250);
+    sidebar_box.add_css_class("sidebar"); // Use standard sidebar class if available
+
+    let sidebar_header = HeaderBar::new();
+    sidebar_header.set_show_title_buttons(false); // Only show buttons on the main content side usually, or consistent
+                                                  // Actually, in a split view, often the left side has a header or just empty space.
+                                                  // Let's just put a label or keep it simple.
+    let sidebar_title = Label::builder()
+        .label("Settings")
+        .css_classes(vec!["title"])
         .build();
+    sidebar_header.set_title_widget(Some(&sidebar_title));
+    sidebar_box.append(&sidebar_header);
+
+    let sidebar_list = ListBox::builder()
+        .selection_mode(SelectionMode::Single)
+        .css_classes(vec!["navigation-sidebar"])
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+
+    let keystroke_row = create_sidebar_row("Keystrokes", "input-keyboard-symbolic");
+    let bubble_row = create_sidebar_row("Bubbles", "comment-symbolic");
+
+    sidebar_list.append(&keystroke_row);
+    sidebar_list.append(&bubble_row);
+
+    let sidebar_scroll = ScrolledWindow::builder()
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .vexpand(true)
+        .child(&sidebar_list)
+        .build();
+
+    sidebar_box.append(&sidebar_scroll);
+    main_box.append(&sidebar_box);
+
+    // Separator
+    let separator = Separator::new(Orientation::Vertical);
+    main_box.append(&separator);
+
+    // Content
+    let content_box = GtkBox::new(Orientation::Vertical, 0);
+    content_box.set_hexpand(true);
+
+    let header_bar = HeaderBar::builder().show_title_buttons(true).build();
+    content_box.append(&header_bar);
 
     let stack = Stack::new();
     stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
-    stack.set_transition_duration(200);
-    stack.set_hexpand(true);
     stack.set_vexpand(true);
 
-    let sidebar = StackSidebar::new();
-    sidebar.set_stack(&stack);
-    sidebar.add_css_class("settings-sidebar");
-    sidebar.set_size_request(200, -1);
-
     let config_ref = config.borrow();
-
     let keystroke_page = create_keystroke_page(&config_ref);
-    stack.add_titled(&keystroke_page.container, Some("keystroke"), "Keystroke");
-
     let bubble_page = create_bubble_page(&config_ref);
-    stack.add_titled(&bubble_page.container, Some("bubble"), "Bubble");
 
-    main_box.append(&sidebar);
+    stack.add_named(&keystroke_page.page, Some("keystrokes"));
+    stack.add_named(&bubble_page, Some("bubbles"));
 
-    let content_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .hexpand(true)
-        .build();
+    content_box.append(&stack);
 
-    let scrolled = gtk4::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk4::PolicyType::Never)
-        .vscrollbar_policy(gtk4::PolicyType::Automatic)
-        .vexpand(true)
-        .child(&stack)
-        .build();
-
-    content_box.append(&scrolled);
-
-    let action_bar = GtkBox::builder()
+    let footer = GtkBox::builder()
+        .css_classes(vec!["toolbar"])
         .orientation(Orientation::Horizontal)
         .spacing(12)
-        .margin_top(16)
-        .margin_bottom(16)
-        .margin_end(24)
-        .halign(gtk4::Align::End)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .halign(Align::End)
         .build();
 
-    let cancel_btn = Button::with_label("Cancel");
-    cancel_btn.add_css_class("cancel-button");
-    let save_btn = Button::with_label("Save");
-    save_btn.add_css_class("suggested-action");
+    let reset_btn = Button::with_label("Reset to Defaults");
+    reset_btn.add_css_class("destructive-action");
 
-    action_bar.append(&cancel_btn);
-    action_bar.append(&save_btn);
-    content_box.append(&action_bar);
+    let save_btn = Button::with_label("Save Settings");
+    save_btn.add_css_class("suggested-action");
+    save_btn.add_css_class("pill");
+
+    footer.append(&reset_btn);
+    footer.append(&save_btn);
+    content_box.append(&footer);
 
     main_box.append(&content_box);
     window.set_child(Some(&main_box));
 
-    let window_clone = window.clone();
-    cancel_btn.connect_clicked(move |_| {
-        window_clone.close();
+    // Signals
+    let stack_clone = stack.clone();
+    sidebar_list.connect_row_selected(move |_, row| {
+        if let Some(row) = row {
+            let name = if row.index() == 0 {
+                "keystrokes"
+            } else {
+                "bubbles"
+            };
+            stack_clone.set_visible_child_name(name);
+        }
     });
+    sidebar_list.select_row(Some(&keystroke_row));
 
     let window_clone = window.clone();
     let config_clone = config.clone();
 
     save_btn.connect_clicked(move |_| {
-        let theme_idx = keystroke_page.theme_dropdown.selected();
-        let theme = THEME_OPTIONS
-            .get(theme_idx as usize)
-            .unwrap_or(&"System")
-            .to_lowercase();
+        let theme = if keystroke_page.theme_light.is_active() {
+            "light"
+        } else if keystroke_page.theme_dark.is_active() {
+            "dark"
+        } else {
+            "system"
+        };
 
         let ks_pos_idx = keystroke_page.position_dropdown.selected();
         let ks_position = POSITION_OPTIONS
@@ -119,39 +158,13 @@ pub fn create_settings_window(
             .map(|(_, p)| *p)
             .unwrap_or(Position::BottomCenter);
 
-        let b_pos_idx = bubble_page.position_dropdown.selected();
-        let b_position = POSITION_OPTIONS
-            .get(b_pos_idx as usize)
-            .map(|(_, p)| *p)
-            .unwrap_or(Position::TopRight);
-
-        let rgba = bubble_page.color_button.rgba();
-        let color_hex = format!(
-            "#{:02x}{:02x}{:02x}",
-            (rgba.red() * 255.0) as u8,
-            (rgba.green() * 255.0) as u8,
-            (rgba.blue() * 255.0) as u8
-        );
-
-        let new_config = Config {
-            keystroke_theme: theme,
-            display_timeout_ms: (keystroke_page.duration_adj.value() * 1000.0) as u64,
-            max_keys: keystroke_page.max_keys_adj.value() as usize,
-            position: ks_position,
-            keystroke_draggable: keystroke_page.draggable_switch.is_active(),
-            keystroke_hotkey: keystroke_page.hotkey_entry.text().to_string(),
-
-            bubble_color: color_hex,
-            bubble_font_size: bubble_page.font_size_adj.value(),
-            bubble_font_family: bubble_page.font_entry.text().to_string(),
-            bubble_hotkey: bubble_page.hotkey_entry.text().to_string(),
-            bubble_sound_enabled: bubble_page.sound_switch.is_active(),
-            bubble_position: b_position,
-            bubble_draggable: bubble_page.draggable_switch.is_active(),
-            bubble_timeout_ms: (bubble_page.duration_adj.value() * 1000.0) as u64,
-
-            ..config_clone.borrow().clone()
-        };
+        let mut new_config = config_clone.borrow().clone();
+        new_config.keystroke_theme = theme.to_string();
+        new_config.display_timeout_ms = (keystroke_page.duration_adj.value() * 1000.0) as u64;
+        new_config.max_keys = keystroke_page.max_keys_adj.value() as usize;
+        new_config.position = ks_position;
+        new_config.keystroke_draggable = keystroke_page.draggable_switch.is_active();
+        new_config.keystroke_hotkey = keystroke_page.hotkey_entry.text().to_string();
 
         debug!("Saving settings...");
         *config_clone.borrow_mut() = new_config.clone();
@@ -164,107 +177,264 @@ pub fn create_settings_window(
         window_clone.close();
     });
 
+    let window_clone = window.clone();
+    reset_btn.connect_clicked(move |_| {
+        window_clone.close();
+    });
+
     window
 }
 
 struct KeystrokeWidgets {
-    container: GtkBox,
-    theme_dropdown: DropDown,
-    duration_adj: Adjustment,
-    max_keys_adj: Adjustment,
-    position_dropdown: DropDown,
-    draggable_switch: Switch,
+    page: ScrolledWindow, // Changed from PreferencesPage
+    theme_light: ToggleButton,
+    theme_dark: ToggleButton,
+    duration_adj: gtk4::Adjustment,
+    max_keys_adj: gtk4::Adjustment,
+    position_dropdown: DropDown, // Changed from ComboRow
+    draggable_switch: Switch,    // Changed from SwitchRow
     hotkey_entry: Entry,
 }
 
+fn create_sidebar_row(title: &str, icon_name: &str) -> ListBoxRow {
+    let row = ListBoxRow::new();
+    let box_ = GtkBox::new(Orientation::Horizontal, 12);
+    box_.set_margin_top(8);
+    box_.set_margin_bottom(8);
+    box_.set_margin_start(12);
+    box_.set_margin_end(12);
+
+    let icon = gtk4::Image::from_icon_name(icon_name);
+    let label = Label::new(Some(title));
+
+    box_.append(&icon);
+    box_.append(&label);
+    row.set_child(Some(&box_));
+    row
+}
+
+fn create_group(title: &str, _subtitle: Option<&str>, content_list: &ListBox) -> GtkBox {
+    let group_box = GtkBox::new(Orientation::Vertical, 6);
+    group_box.set_margin_top(12);
+    group_box.set_margin_bottom(12);
+    group_box.set_margin_start(24);
+    group_box.set_margin_end(24);
+
+    let title_label = Label::builder()
+        .label(title)
+        .xalign(0.0)
+        .css_classes(vec!["heading"])
+        .build();
+    group_box.append(&title_label);
+
+    // Add styling to listbox to look like a group
+    content_list.add_css_class("boxed-list");
+    group_box.append(content_list);
+
+    group_box
+}
+
+fn create_row(title: &str, subtitle: Option<&str>) -> (ListBoxRow, GtkBox) {
+    let row = ListBoxRow::new();
+    // row.set_activatable(false); // Usually controls shouldn't trigger row activation in the list sense
+
+    let box_ = GtkBox::new(Orientation::Horizontal, 12);
+    box_.set_margin_top(8);
+    box_.set_margin_bottom(8);
+    box_.set_margin_start(12);
+    box_.set_margin_end(12);
+    box_.set_valign(Align::Center);
+
+    let text_box = GtkBox::new(Orientation::Vertical, 2);
+    text_box.set_valign(Align::Center);
+    text_box.set_hexpand(true);
+
+    let title_lbl = Label::builder()
+        .label(title)
+        .xalign(0.0)
+        .css_classes(vec!["body"])
+        .build();
+    text_box.append(&title_lbl);
+
+    if let Some(sub) = subtitle {
+        let sub_lbl = Label::builder()
+            .label(sub)
+            .xalign(0.0)
+            .css_classes(vec!["caption", "dim-label"])
+            .build();
+        text_box.append(&sub_lbl);
+    }
+
+    box_.append(&text_box);
+    row.set_child(Some(&box_));
+
+    (row, box_)
+}
+
 fn create_keystroke_page(config: &Config) -> KeystrokeWidgets {
-    let container = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(0)
-        .css_classes(["settings-content-area"])
+    let container = GtkBox::new(Orientation::Vertical, 0);
+
+    let scrolled = ScrolledWindow::builder()
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .child(&container)
         .build();
 
-    let header = create_page_header("Keystroke", "Configure keystroke display settings");
-    container.append(&header);
+    // Live Preview
+    let preview_list = ListBox::new();
+    preview_list.set_selection_mode(SelectionMode::None);
 
-    add_section_title(&container, "Appearance");
-
-    let appearance_card = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .css_classes(["settings-card"])
+    let preview_row = ListBoxRow::new();
+    let preview_card = GtkBox::builder()
+        .css_classes(vec!["card"])
+        .height_request(150)
+        .halign(Align::Fill)
+        .valign(Align::Center)
         .build();
 
-    let (theme_row, theme_dropdown) = create_dropdown_row(
-        "Theme Style",
-        Some("Light, Dark, or follow system theme"),
-        &THEME_OPTIONS,
-        THEME_OPTIONS
-            .iter()
-            .position(|&t| t.to_lowercase() == config.keystroke_theme)
-            .unwrap_or(2) as u32,
+    let center_box = GtkBox::new(Orientation::Horizontal, 8);
+    center_box.set_halign(Align::Center);
+    center_box.set_valign(Align::Center);
+
+    let ctrl_lbl = create_keycap("Ctrl");
+    let c_lbl = create_keycap("C");
+
+    center_box.append(&ctrl_lbl);
+    center_box.append(&c_lbl);
+    preview_card.append(&center_box);
+    preview_row.set_child(Some(&preview_card));
+    preview_list.append(&preview_row);
+
+    let preview_group = create_group("LIVE PREVIEW", None, &preview_list);
+    container.append(&preview_group);
+
+    // Behavior
+    let behavior_list = ListBox::new();
+    behavior_list.set_selection_mode(SelectionMode::None);
+
+    let (hotkey_row, hotkey_box) = create_row(
+        "Hotkey Activation",
+        Some("Press keys to set enable/disable toggle"),
     );
-    appearance_card.append(&theme_row);
 
-    let (duration_row, duration_adj) = create_scale_row(
-        "Duration",
-        Some("How long keystrokes stay visible"),
+    let hotkey_entry = Entry::builder()
+        .text(&config.keystroke_hotkey)
+        .valign(Align::Center)
+        .css_classes(vec!["flat"])
+        .width_request(100)
+        .build();
+    hotkey_box.append(&hotkey_entry);
+    behavior_list.append(&hotkey_row);
+
+    let (draggable_row, draggable_box) = create_row(
+        "Draggable Overlay",
+        Some("Allow moving the overlay with mouse"),
+    );
+    let draggable_switch = Switch::builder()
+        .active(config.keystroke_draggable)
+        .valign(Align::Center)
+        .build();
+    draggable_box.append(&draggable_switch);
+    behavior_list.append(&draggable_row);
+
+    let behavior_group = create_group("BEHAVIOR", None, &behavior_list);
+    container.append(&behavior_group);
+
+    // Appearance
+    let appearance_list = ListBox::new();
+    appearance_list.set_selection_mode(SelectionMode::None);
+
+    let (theme_row, theme_box) = create_row("Theme Style", None);
+
+    let theme_toggle_box = GtkBox::builder()
+        .css_classes(vec!["linked"])
+        .valign(Align::Center)
+        .build();
+
+    let theme_light = ToggleButton::builder().label("Light").build();
+    let theme_dark = ToggleButton::builder().label("Dark").build();
+    let theme_sys = ToggleButton::builder().label("System").build();
+
+    theme_toggle_box.append(&theme_light);
+    theme_toggle_box.append(&theme_dark);
+    theme_toggle_box.append(&theme_sys);
+
+    theme_dark.set_group(Some(&theme_light));
+    theme_sys.set_group(Some(&theme_light));
+
+    match config.keystroke_theme.as_str() {
+        "light" => theme_light.set_active(true),
+        "dark" => theme_dark.set_active(true),
+        _ => theme_sys.set_active(true),
+    }
+
+    theme_box.append(&theme_toggle_box);
+    appearance_list.append(&theme_row);
+
+    let (duration_row, duration_box) =
+        create_row("Display Duration", Some("How long keys stay visible"));
+
+    let duration_adj = gtk4::Adjustment::new(
         config.display_timeout_ms as f64 / 1000.0,
         0.5,
         10.0,
         0.5,
-        "s",
-    );
-    appearance_card.append(&duration_row);
-
-    let (max_keys_row, max_keys_adj) = create_spin_row(
-        "Max Keys Displayed",
-        Some("Maximum number of keys to show"),
-        config.max_keys as f64,
         1.0,
-        20.0,
+        0.0,
     );
-    appearance_card.append(&max_keys_row);
 
-    container.append(&appearance_card);
+    let scale = Scale::builder()
+        .orientation(Orientation::Horizontal)
+        .adjustment(&duration_adj)
+        .draw_value(false)
+        .hexpand(true)
+        .width_request(150)
+        .build();
+    scale.add_css_class("accent");
 
-    add_section_title(&container, "Position & Behavior");
+    let val_label = Label::new(Some("3.5s")); // Placeholder for dynamic
+                                              // In a real implementation we'd connect signal_value_changed to update label
 
-    let position_card = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .css_classes(["settings-card"])
+    let scale_container = GtkBox::new(Orientation::Horizontal, 12);
+    scale_container.append(&scale);
+    scale_container.append(&val_label);
+    duration_box.append(&scale_container);
+    appearance_list.append(&duration_row);
+
+    let (max_keys_row, max_keys_box) =
+        create_row("Max Keys Displayed", Some("Number of recent keys shown"));
+
+    let max_keys_adj = gtk4::Adjustment::new(config.max_keys as f64, 1.0, 20.0, 1.0, 0.0, 0.0);
+    let spin_btn = gtk4::SpinButton::builder()
+        .adjustment(&max_keys_adj)
+        .valign(Align::Center)
         .build();
 
-    let current_pos_idx = POSITION_OPTIONS
-        .iter()
-        .position(|(_, p)| *p == config.position)
-        .unwrap_or(4) as u32;
-    let (pos_row, position_dropdown) = create_dropdown_row(
-        "Screen Position",
-        Some("Where keystrokes appear on screen"),
-        &POSITION_OPTIONS.map(|(n, _)| n),
-        current_pos_idx,
-    );
-    position_card.append(&pos_row);
+    max_keys_box.append(&spin_btn);
+    appearance_list.append(&max_keys_row);
 
-    let (drag_row, draggable_switch) = create_switch_row(
-        "Draggable",
-        Some("Allow dragging to any position"),
-        config.keystroke_draggable,
-    );
-    position_card.append(&drag_row);
+    let (position_row, position_box) = create_row("Screen Position", Some("Default anchor point"));
 
-    let (hotkey_row, hotkey_entry) = create_entry_row(
-        "Trigger Hotkey",
-        Some("Keyboard shortcut to toggle"),
-        &config.keystroke_hotkey,
-    );
-    position_card.append(&hotkey_row);
+    let position_dropdown = DropDown::builder()
+        .model(&StringList::new(&POSITION_OPTIONS.map(|(n, _)| n)))
+        .selected(
+            POSITION_OPTIONS
+                .iter()
+                .position(|(_, p)| *p == config.position)
+                .unwrap_or(7) as u32,
+        )
+        .valign(Align::Center)
+        .build();
 
-    container.append(&position_card);
+    position_box.append(&position_dropdown);
+    appearance_list.append(&position_row);
+
+    let appearance_group = create_group("APPEARANCE", None, &appearance_list);
+    container.append(&appearance_group);
 
     KeystrokeWidgets {
-        container,
-        theme_dropdown,
+        page: scrolled,
+        theme_light,
+        theme_dark,
         duration_adj,
         max_keys_adj,
         position_dropdown,
@@ -273,479 +443,29 @@ fn create_keystroke_page(config: &Config) -> KeystrokeWidgets {
     }
 }
 
-struct BubbleWidgets {
-    container: GtkBox,
-    color_button: ColorDialogButton,
-    font_size_adj: Adjustment,
-    font_entry: Entry,
-    hotkey_entry: Entry,
-    sound_switch: Switch,
-    position_dropdown: DropDown,
-    draggable_switch: Switch,
-    duration_adj: Adjustment,
-}
+fn create_bubble_page(_config: &Config) -> ScrolledWindow {
+    let container = GtkBox::new(Orientation::Vertical, 0);
+    let list = ListBox::new();
+    list.set_selection_mode(SelectionMode::None);
 
-fn create_bubble_page(config: &Config) -> BubbleWidgets {
-    let container = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(0)
-        .css_classes(["settings-content-area"])
-        .build();
-
-    let header = create_page_header("Bubble", "Configure text bubble display settings");
-    container.append(&header);
-
-    add_section_title(&container, "Appearance");
-
-    let appearance_card = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .css_classes(["settings-card"])
-        .build();
-
-    let (color_row, color_button) =
-        create_color_row("Bubble Color", Some("Background color of bubbles"), config);
-    appearance_card.append(&color_row);
-
-    let (size_row, font_size_adj) = create_scale_row(
-        "Font Size",
-        Some("Text size in bubbles"),
-        config.bubble_font_size,
-        0.5,
-        3.0,
-        0.1,
-        "em",
+    let (row, _) = create_row(
+        "Bubble Settings",
+        Some("Bubble configuration is not yet refactored."),
     );
-    appearance_card.append(&size_row);
+    list.append(&row);
 
-    let (font_row, font_entry) = create_entry_row(
-        "Font Family",
-        Some("Font used in bubbles"),
-        &config.bubble_font_family,
-    );
-    appearance_card.append(&font_row);
+    let group = create_group("Bubble Settings", None, &list);
+    container.append(&group);
 
-    container.append(&appearance_card);
-
-    add_section_title(&container, "Behavior");
-
-    let behavior_card = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .css_classes(["settings-card"])
-        .build();
-
-    let (hotkey_row, hotkey_entry) = create_entry_row(
-        "Trigger Hotkey",
-        Some("Keyboard shortcut to trigger bubble"),
-        &config.bubble_hotkey,
-    );
-    behavior_card.append(&hotkey_row);
-
-    let (sound_row, sound_switch) = create_switch_row(
-        "Sound Effect",
-        Some("Play sound when bubble appears"),
-        config.bubble_sound_enabled,
-    );
-    behavior_card.append(&sound_row);
-
-    let (duration_row, duration_adj) = create_scale_row(
-        "Duration",
-        Some("How long bubbles stay visible"),
-        config.bubble_timeout_ms as f64 / 1000.0,
-        1.0,
-        60.0,
-        1.0,
-        "s",
-    );
-    behavior_card.append(&duration_row);
-
-    container.append(&behavior_card);
-
-    add_section_title(&container, "Position");
-
-    let position_card = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .css_classes(["settings-card"])
-        .build();
-
-    let current_pos_idx = POSITION_OPTIONS
-        .iter()
-        .position(|(_, p)| *p == config.bubble_position)
-        .unwrap_or(2) as u32;
-    let (pos_row, position_dropdown) = create_dropdown_row(
-        "Screen Position",
-        Some("Where bubbles appear on screen"),
-        &POSITION_OPTIONS.map(|(n, _)| n),
-        current_pos_idx,
-    );
-    position_card.append(&pos_row);
-
-    let (drag_row, draggable_switch) = create_switch_row(
-        "Draggable",
-        Some("Allow dragging to any position"),
-        config.bubble_draggable,
-    );
-    position_card.append(&drag_row);
-
-    container.append(&position_card);
-
-    BubbleWidgets {
-        container,
-        color_button,
-        font_size_adj,
-        font_entry,
-        hotkey_entry,
-        sound_switch,
-        position_dropdown,
-        draggable_switch,
-        duration_adj,
-    }
+    ScrolledWindow::builder().child(&container).build()
 }
 
-fn create_page_header(title: &str, subtitle: &str) -> GtkBox {
-    let header = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(16)
-        .css_classes(["settings-page-header"])
-        .build();
-
-    let icon_box = GtkBox::builder()
-        .css_classes(["settings-page-icon"])
-        .build();
-
-    let icon_label = Label::builder().label("").build();
-    icon_box.append(&icon_label);
-
-    let text_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let title_label = Label::builder()
-        .label(title)
-        .css_classes(["settings-page-title"])
-        .halign(gtk4::Align::Start)
-        .build();
-
-    let subtitle_label = Label::builder()
-        .label(subtitle)
-        .css_classes(["settings-page-subtitle"])
-        .halign(gtk4::Align::Start)
-        .build();
-
-    text_box.append(&title_label);
-    text_box.append(&subtitle_label);
-
-    header.append(&icon_box);
-    header.append(&text_box);
-
-    header
-}
-
-fn add_section_title(container: &GtkBox, title: &str) {
-    let label = Label::builder()
-        .label(title)
-        .css_classes(["settings-section-title"])
-        .halign(gtk4::Align::Start)
-        .build();
-    container.append(&label);
-}
-
-fn create_dropdown_row(
-    label: &str,
-    sublabel: Option<&str>,
-    options: &[&str],
-    selected: u32,
-) -> (GtkBox, DropDown) {
-    let row = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .css_classes(["settings-row"])
-        .build();
-
-    let label_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .hexpand(true)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let label_w = Label::builder()
-        .label(label)
-        .halign(gtk4::Align::Start)
-        .css_classes(["settings-label"])
-        .build();
-    label_box.append(&label_w);
-
-    if let Some(sub) = sublabel {
-        let subtitle_widget = Label::builder()
-            .label(sub)
-            .halign(gtk4::Align::Start)
-            .css_classes(["settings-sublabel"])
-            .build();
-        label_box.append(&subtitle_widget);
-    }
-
-    let list = StringList::new(options);
-    let dropdown = DropDown::new(Some(list), gtk4::Expression::NONE);
-    dropdown.set_selected(selected);
-    dropdown.set_valign(gtk4::Align::Center);
-    dropdown.set_halign(gtk4::Align::End);
-
-    row.append(&label_box);
-    row.append(&dropdown);
-    (row, dropdown)
-}
-
-fn create_spin_row(
-    label: &str,
-    sublabel: Option<&str>,
-    value: f64,
-    min: f64,
-    max: f64,
-) -> (GtkBox, Adjustment) {
-    let row = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .css_classes(["settings-row"])
-        .build();
-
-    let label_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .hexpand(true)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let label_w = Label::builder()
-        .label(label)
-        .halign(gtk4::Align::Start)
-        .css_classes(["settings-label"])
-        .build();
-    label_box.append(&label_w);
-
-    if let Some(sub) = sublabel {
-        let subtitle_widget = Label::builder()
-            .label(sub)
-            .halign(gtk4::Align::Start)
-            .css_classes(["settings-sublabel"])
-            .build();
-        label_box.append(&subtitle_widget);
-    }
-
-    let adj = Adjustment::new(value, min, max, 1.0, 5.0, 0.0);
-    let spin = SpinButton::builder()
-        .adjustment(&adj)
-        .climb_rate(1.0)
-        .digits(0)
-        .halign(gtk4::Align::End)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    row.append(&label_box);
-    row.append(&spin);
-    (row, adj)
-}
-
-fn create_switch_row(label: &str, sublabel: Option<&str>, active: bool) -> (GtkBox, Switch) {
-    let row = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .css_classes(["settings-row"])
-        .build();
-
-    let label_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .hexpand(true)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let label_w = Label::builder()
-        .label(label)
-        .halign(gtk4::Align::Start)
-        .css_classes(["settings-label"])
-        .build();
-    label_box.append(&label_w);
-
-    if let Some(sub) = sublabel {
-        let subtitle_widget = Label::builder()
-            .label(sub)
-            .halign(gtk4::Align::Start)
-            .css_classes(["settings-sublabel"])
-            .build();
-        label_box.append(&subtitle_widget);
-    }
-
-    let switch = Switch::builder()
-        .state(active)
-        .active(active)
-        .valign(gtk4::Align::Center)
-        .halign(gtk4::Align::End)
-        .build();
-
-    row.append(&label_box);
-    row.append(&switch);
-    (row, switch)
-}
-
-fn create_entry_row(label: &str, sublabel: Option<&str>, text: &str) -> (GtkBox, Entry) {
-    let row = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .css_classes(["settings-row"])
-        .build();
-
-    let label_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .hexpand(true)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let label_w = Label::builder()
-        .label(label)
-        .halign(gtk4::Align::Start)
-        .css_classes(["settings-label"])
-        .build();
-    label_box.append(&label_w);
-
-    if let Some(sub) = sublabel {
-        let subtitle_widget = Label::builder()
-            .label(sub)
-            .halign(gtk4::Align::Start)
-            .css_classes(["settings-sublabel"])
-            .build();
-        label_box.append(&subtitle_widget);
-    }
-
-    let entry = Entry::builder()
-        .text(text)
-        .width_request(180)
-        .valign(gtk4::Align::Center)
-        .halign(gtk4::Align::End)
-        .css_classes(["flat-entry"])
-        .build();
-
-    row.append(&label_box);
-    row.append(&entry);
-    (row, entry)
-}
-
-fn create_scale_row(
-    label: &str,
-    sublabel: Option<&str>,
-    value: f64,
-    min: f64,
-    max: f64,
-    step: f64,
-    _unit: &str,
-) -> (GtkBox, Adjustment) {
-    let row = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .css_classes(["settings-row"])
-        .build();
-
-    let label_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .hexpand(true)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let label_w = Label::builder()
-        .label(label)
-        .halign(gtk4::Align::Start)
-        .css_classes(["settings-label"])
-        .build();
-    label_box.append(&label_w);
-
-    if let Some(sub) = sublabel {
-        let subtitle_widget = Label::builder()
-            .label(sub)
-            .halign(gtk4::Align::Start)
-            .css_classes(["settings-sublabel"])
-            .build();
-        label_box.append(&subtitle_widget);
-    }
-
-    let control_box = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .halign(gtk4::Align::End)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let adj = Adjustment::new(value, min, max, step, step * 2.0, 0.0);
-    let scale = Scale::builder()
-        .orientation(Orientation::Horizontal)
-        .adjustment(&adj)
-        .draw_value(true)
-        .value_pos(gtk4::PositionType::Left)
-        .digits(1)
-        .width_request(180)
-        .build();
-
-    control_box.append(&scale);
-
-    row.append(&label_box);
-    row.append(&control_box);
-    (row, adj)
-}
-
-fn create_color_row(
-    label: &str,
-    sublabel: Option<&str>,
-    config: &Config,
-) -> (GtkBox, ColorDialogButton) {
-    let row = GtkBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .css_classes(["settings-row"])
-        .build();
-
-    let label_box = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .hexpand(true)
-        .valign(gtk4::Align::Center)
-        .build();
-
-    let label_w = Label::builder()
-        .label(label)
-        .halign(gtk4::Align::Start)
-        .css_classes(["settings-label"])
-        .build();
-    label_box.append(&label_w);
-
-    if let Some(sub) = sublabel {
-        let subtitle_widget = Label::builder()
-            .label(sub)
-            .halign(gtk4::Align::Start)
-            .css_classes(["settings-sublabel"])
-            .build();
-        label_box.append(&subtitle_widget);
-    }
-
-    let color_dialog = ColorDialog::new();
-    let color_button = ColorDialogButton::new(Some(color_dialog));
-    color_button.set_valign(gtk4::Align::Center);
-    color_button.set_halign(gtk4::Align::End);
-
-    if let Ok(rgba) = gtk4::gdk::RGBA::parse(&config.bubble_color) {
-        color_button.set_rgba(&rgba);
-    }
-
-    row.append(&label_box);
-    row.append(&color_button);
-    (row, color_button)
-}
-
-fn apply_settings_css(window: &ApplicationWindow) {
-    let provider = CssProvider::new();
-    provider.load_from_string(SETTINGS_CSS);
-
-    let display = gtk4::prelude::WidgetExt::display(window);
-
-    gtk4::style_context_add_provider_for_display(
-        &display,
-        &provider,
-        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
+fn create_keycap(text: &str) -> Label {
+    let lbl = Label::new(Some(text));
+    lbl.add_css_class("keycap");
+    lbl.set_width_request(50);
+    lbl.set_height_request(50);
+    lbl
 }
 
 pub fn show_settings(window: &ApplicationWindow) {
