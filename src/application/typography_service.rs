@@ -16,6 +16,27 @@ impl TypographyService {
     ///
     /// Returns `FontError` if the font provider fails to load fonts.
     pub async fn get_system_fonts(&self) -> Result<Arc<Vec<String>>, FontError> {
-        FontProvider::load_system_fonts_asynchronous().await
+        let fonts = FontProvider::load_system_fonts_asynchronous().await?;
+
+        let filtered: Vec<String> = fonts
+            .iter()
+            .filter(|f| {
+                if f.starts_with("Noto Sans ") || f.starts_with("Noto Serif ") {
+                    let allowed = [
+                        "Noto Sans",
+                        "Noto Serif",
+                        "Noto Sans Mono",
+                        "Noto Serif Mono",
+                        "Noto Sans Display",
+                        "Noto Serif Display",
+                    ];
+                    return allowed.contains(&f.as_str());
+                }
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok(Arc::new(filtered))
     }
 }

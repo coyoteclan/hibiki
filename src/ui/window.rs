@@ -21,7 +21,13 @@ fn generate_overlay_css(
         bubble_font_family = safe_bubble_family,
         bubble_font_size = bubble_font_size
     );
-    format!("{}\n{}", include_str!("../../style/defaults.css"), overlay)
+    format!(
+        "{}\n{}\n{}\n{}",
+        include_str!("../../style/defaults.css"),
+        include_str!("../../style/settings.css"),
+        include_str!("../../style/bubble.css"),
+        overlay
+    )
 }
 
 pub fn create_window(app: &Application, config: &Config) -> Result<ApplicationWindow> {

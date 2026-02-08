@@ -122,7 +122,7 @@ impl SoundPackLoader {
         PathBuf::from("assets/sounds")
     }
 
-    pub fn list_available_packs() -> Vec<String> {
+    pub fn list_available_packs() -> Vec<(String, String)> {
         let mut packs = Vec::new();
         let path = Self::get_sound_pack_dir();
 
@@ -130,17 +130,33 @@ impl SoundPackLoader {
             for entry in entries.flatten() {
                 if let Ok(file_type) = entry.file_type() {
                     if file_type.is_dir() {
-                        if let Ok(name) = entry.file_name().into_string() {
-                            packs.push(name);
+                        if let Ok(dir_name) = entry.file_name().into_string() {
+                            let config_path = entry.path().join("config.json");
+                            let display_name = if let Ok(file) = File::open(&config_path) {
+                                let reader = BufReader::new(file);
+                                if let Ok(json) =
+                                    serde_json::from_reader::<_, serde_json::Value>(reader)
+                                {
+                                    json.get("name")
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string())
+                                        .unwrap_or_else(|| dir_name.clone())
+                                } else {
+                                    dir_name.clone()
+                                }
+                            } else {
+                                dir_name.clone()
+                            };
+                            packs.push((dir_name, display_name));
                         }
                     }
                 }
             }
         }
 
-        packs.sort();
+        packs.sort_by(|a, b| a.1.cmp(&b.1));
         if packs.is_empty() {
-            packs.push("default".to_string());
+            packs.push(("default".to_string(), "Default".to_string()));
         }
         packs
     }

@@ -6,7 +6,7 @@ fn font_loading_benchmark(c: &mut Criterion) {
         .enable_all()
         .build()
         .unwrap();
-    
+
     c.bench_function("load_system_fonts", |b| {
         b.to_async(&rt).iter(|| async {
             let _ = FontProvider::load_system_fonts_asynchronous().await;

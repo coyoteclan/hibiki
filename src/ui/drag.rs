@@ -24,7 +24,6 @@ impl Default for DragState {
 }
 
 pub fn setup_drag(window: &ApplicationWindow) -> Vec<gtk4::EventController> {
-
     window.set_anchor(Edge::Top, true);
     window.set_anchor(Edge::Left, true);
     window.set_anchor(Edge::Bottom, false);
