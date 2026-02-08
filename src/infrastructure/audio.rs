@@ -11,7 +11,7 @@ use std::time::Duration;
 
 #[derive(Clone, Debug)]
 pub struct AudioBuffer {
-    pub samples: Arc<[f32]>,
+    pub samples: Arc<[i16]>,
     pub sample_rate: u32,
     pub channels: u16,
 }
@@ -55,7 +55,7 @@ impl AudioBuffer {
 }
 
 pub struct AudioBufferSource {
-    buffer: Arc<[f32]>,
+    buffer: Arc<[i16]>,
     pos: usize,
     sample_rate: u32,
     channels: u16,
@@ -68,7 +68,7 @@ impl Iterator for AudioBufferSource {
         if self.pos < self.end_pos {
             let sample = self.buffer[self.pos];
             self.pos += 1;
-            Some(sample)
+            Some(sample as f32 / 32767.0)
         } else {
             None
         }
@@ -250,7 +250,9 @@ impl SoundPackLoader {
         let sample_rate = source.sample_rate();
         let channels = source.channels();
 
-        let samples: Vec<f32> = source.collect();
+        let samples: Vec<i16> = source
+            .map(|s| (s.clamp(-1.0, 1.0) * 32767.0) as i16)
+            .collect();
 
         Ok(AudioBuffer {
             samples: samples.into(),

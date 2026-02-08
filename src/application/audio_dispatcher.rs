@@ -4,12 +4,13 @@ use anyhow::Result;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use rodio::{OutputStream, OutputStreamBuilder, Source};
 use std::path::PathBuf;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, RwLock};
 
 pub struct AudioEngine {
     #[allow(dead_code)]
     state: Arc<RwLock<AudioState>>,
+    cmd_rx: Option<std::sync::mpsc::Receiver<PlayCommand>>,
 }
 
 struct AudioState {
@@ -26,7 +27,7 @@ enum PlayCommand {
 #[derive(Clone)]
 pub struct AudioDispatcher {
     state: Arc<RwLock<AudioState>>,
-    cmd_tx: Sender<PlayCommand>,
+    cmd_tx: SyncSender<PlayCommand>,
 }
 
 fn try_open_stream() -> Result<OutputStream, String> {
@@ -95,55 +96,65 @@ impl AudioEngine {
             pack_name: None,
         }));
 
-        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<PlayCommand>();
-
-        std::thread::spawn(move || {
-            tracing::info!("Audio thread started");
-
-            match try_open_stream() {
-                Ok(stream) => {
-                    tracing::info!("Audio output stream opened successfully");
-                    let mixer = stream.mixer();
-
-                    while let Ok(cmd) = cmd_rx.recv() {
-                        match cmd {
-                            PlayCommand::Play(source_box) => {
-                                mixer.add(source_box);
-                            }
-                        }
-                    }
-                    tracing::info!("Audio thread shutting down");
-                }
-                Err(e) => {
-                    tracing::error!("Audio thread failed to open output stream: {}", e);
-
-                    let default_host = rodio::cpal::default_host();
-                    tracing::info!("Default audio host: {:?}", default_host.id());
-
-                    if let Ok(devices) = default_host.output_devices() {
-                        tracing::info!("Available output devices on default host:");
-                        for (i, device) in devices.enumerate() {
-                            let name = device.name().unwrap_or_else(|_| "unknown".to_string());
-                            tracing::info!("  Device {}: {}", i, name);
-                        }
-                    } else {
-                        tracing::error!("Failed to list output devices");
-                    }
-
-                    tracing::info!("All available hosts:");
-                    for host_id in rodio::cpal::available_hosts() {
-                        tracing::info!("  {:?}", host_id);
-                    }
-                }
-            }
-        });
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::sync_channel::<PlayCommand>(1024);
 
         let dispatcher = AudioDispatcher {
             state: state.clone(),
             cmd_tx,
         };
 
-        Ok((Self { state }, dispatcher))
+        Ok((
+            Self {
+                state,
+                cmd_rx: Some(cmd_rx),
+            },
+            dispatcher,
+        ))
+    }
+
+    pub fn start(&mut self) {
+        if let Some(cmd_rx) = self.cmd_rx.take() {
+            std::thread::spawn(move || {
+                tracing::info!("Audio thread started (Lazy Init)");
+
+                match try_open_stream() {
+                    Ok(stream) => {
+                        tracing::info!("Audio output stream opened successfully");
+                        let mixer = stream.mixer();
+
+                        while let Ok(cmd) = cmd_rx.recv() {
+                            match cmd {
+                                PlayCommand::Play(source_box) => {
+                                    mixer.add(source_box);
+                                }
+                            }
+                        }
+                        tracing::info!("Audio thread shutting down");
+                    }
+                    Err(e) => {
+                        tracing::error!("Audio thread failed to open output stream: {}", e);
+
+                        let default_host = rodio::cpal::default_host();
+                        tracing::info!("Default audio host: {:?}", default_host.id());
+
+                        if let Ok(devices) = default_host.output_devices() {
+                            tracing::info!("Available output devices on default host:");
+                            for (i, device) in devices.enumerate() {
+                                let name = device.name().unwrap_or_else(|_| "unknown".to_string());
+                                tracing::info!("  Device {}: {}", i, name);
+                            }
+                        } else {
+                            tracing::error!("Failed to list output devices");
+                        }
+
+                        tracing::info!("All available hosts:");
+                        for host_id in rodio::cpal::available_hosts() {
+                            tracing::info!("  {:?}", host_id);
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -187,7 +198,7 @@ impl AudioDispatcher {
                     KeyDefine::Multi(Some(filename)) => {
                         if let Some(buffer) = pack.buffers.get(filename) {
                             let source = buffer.to_source().amplify(state.volume);
-                            let _ = self.cmd_tx.send(PlayCommand::Play(Box::new(source)));
+                            let _ = self.cmd_tx.try_send(PlayCommand::Play(Box::new(source)));
                         }
                     }
                     KeyDefine::Single(range) => {
@@ -198,7 +209,7 @@ impl AudioDispatcher {
                                 let source = buffer
                                     .to_source_slice(start, duration)
                                     .amplify(state.volume);
-                                let _ = self.cmd_tx.send(PlayCommand::Play(Box::new(source)));
+                                let _ = self.cmd_tx.try_send(PlayCommand::Play(Box::new(source)));
                             }
                         }
                     }

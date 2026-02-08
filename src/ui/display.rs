@@ -32,6 +32,8 @@ pub struct KeyDisplayWidget {
     max_keys: usize,
 
     display_duration: Duration,
+
+    logo_texture: Option<Texture>,
 }
 
 impl KeyDisplayWidget {
@@ -45,6 +47,8 @@ impl KeyDisplayWidget {
 
         container.add_css_class("keystroke-container");
 
+        let logo_texture = Self::load_logo_texture();
+
         Self {
             container,
             displayed_keys: VecDeque::new(),
@@ -52,6 +56,30 @@ impl KeyDisplayWidget {
             held_keys: HashSet::new(),
             max_keys,
             display_duration: Duration::from_millis(display_timeout_ms),
+            logo_texture,
+        }
+    }
+
+    fn load_logo_texture() -> Option<Texture> {
+        let settings = gtk4::Settings::default();
+        let is_dark = settings
+            .map(|s| s.is_gtk_application_prefer_dark_theme())
+            .unwrap_or(false);
+        let color = if is_dark { "#ffffff" } else { "#000000" };
+
+        let svg_str = String::from_utf8_lossy(LOGO_SVG);
+        let svg_with_color = svg_str.replace("currentColor", color);
+
+        let stream = gtk4::gio::MemoryInputStream::from_bytes(&gtk4::glib::Bytes::from(
+            svg_with_color.as_bytes(),
+        ));
+
+        if let Ok(pixbuf) =
+            Pixbuf::from_stream_at_scale(&stream, 18, 18, false, gtk4::gio::Cancellable::NONE)
+        {
+            Some(Texture::for_pixbuf(&pixbuf))
+        } else {
+            None
         }
     }
 
@@ -160,25 +188,8 @@ impl KeyDisplayWidget {
     }
 
     fn create_logo_image(&self) -> Image {
-        let settings = gtk4::Settings::default();
-        let is_dark = settings
-            .map(|s| s.is_gtk_application_prefer_dark_theme())
-            .unwrap_or(false);
-        let color = if is_dark { "#ffffff" } else { "#000000" };
-
-        let svg_str = String::from_utf8_lossy(LOGO_SVG);
-        let svg_with_color = svg_str.replace("currentColor", color);
-
-        let stream = gtk4::gio::MemoryInputStream::from_bytes(&gtk4::glib::Bytes::from(
-            svg_with_color.as_bytes(),
-        ));
-
-        if let Ok(pixbuf) =
-            Pixbuf::from_stream_at_scale(&stream, 18, 18, false, gtk4::gio::Cancellable::NONE)
-        {
-            let texture = Texture::for_pixbuf(&pixbuf);
-            let image = Image::from_paintable(Some(&texture));
-
+        if let Some(texture) = &self.logo_texture {
+            let image = Image::from_paintable(Some(texture));
             image.set_pixel_size(18);
             image
         } else {

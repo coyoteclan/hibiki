@@ -4,12 +4,13 @@ use crate::domain::config::{AudioConfig, Position};
 use crate::infrastructure::audio::SoundPackLoader;
 use gtk4::prelude::*;
 use gtk4::{
-    glib, Adjustment, Align, Application, ApplicationWindow, Box as GtkBox, Button,
-    EventControllerKey, Grid, Label, ListBox, ListBoxRow, Orientation, Overflow, Scale,
-    ScrolledWindow, SearchEntry, SelectionMode, Stack, Switch, ToggleButton,
+    glib, Adjustment, Align, Application, ApplicationWindow, Box as GtkBox, Button, CustomFilter,
+    EventControllerKey, FilterListModel, Grid, Label, ListItemFactory, ListScrollFlags, ListView,
+    Orientation, Overflow, Scale, ScrolledWindow, SearchEntry, SelectionModel,
+    SignalListItemFactory, SingleSelection, Stack, StringList, Switch, ToggleButton,
 };
 use std::cell::RefCell;
-
+use std::collections::HashMap;
 use std::rc::Rc;
 
 pub fn create_settings_window(
@@ -100,126 +101,130 @@ fn create_font_selector(
         .overflow(Overflow::Hidden)
         .build();
 
-    let font_list = ListBox::builder()
-        .selection_mode(SelectionMode::Single)
-        .css_classes(vec!["navigation-sidebar"])
-        .build();
+    let string_list = StringList::new(&[]);
+    let filter = CustomFilter::new(move |_item| true);
+
+    let filter_model = FilterListModel::new(Some(string_list.clone()), Some(filter.clone()));
+    let selection_model = SingleSelection::new(Some(filter_model.clone()));
+
+    let factory = SignalListItemFactory::new();
+
+    factory.connect_setup(move |_, list_item| {
+        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let row_box = GtkBox::new(Orientation::Horizontal, 12);
+        row_box.set_margin_start(12);
+        row_box.set_margin_end(12);
+        row_box.set_margin_top(8);
+        row_box.set_margin_bottom(8);
+
+        let label = Label::builder().xalign(0.0).hexpand(true).build();
+
+        row_box.append(&label);
+
+        list_item.set_child(Some(&row_box));
+    });
+
+    factory.connect_bind(move |_, list_item| {
+        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let string_obj = list_item
+            .item()
+            .and_downcast::<gtk4::StringObject>()
+            .unwrap();
+        let font_name = string_obj.string();
+
+        let row_box = list_item.child().and_downcast::<GtkBox>().unwrap();
+        let label = row_box.first_child().and_downcast::<Label>().unwrap();
+
+        label.set_label(&font_name);
+    });
+
+    let list_view = ListView::new(Some(selection_model.clone()), Some(factory));
+    list_view.add_css_class("navigation-sidebar");
 
     let service_c = typography_service.clone();
-    let current_font_c = current_font.clone();
-    let list_c = font_list.clone();
-    let rows_store = Rc::new(RefCell::new(Vec::new()));
-    let rows_store_c = rows_store.clone();
+    let list_c = string_list.clone();
+    let selection_c = selection_model.clone();
+    let current_font_startup = current_font.clone();
+    let list_view_weak = list_view.downgrade();
+
+    list_view.connect_map(move |list_view| {
+        if let Some(model) = list_view.model() {
+            if let Some(selection_model) = model.downcast_ref::<SingleSelection>() {
+                let selected = selection_model.selected();
+                if selected != gtk4::INVALID_LIST_POSITION {
+                    list_view.scroll_to(
+                        selected,
+                        ListScrollFlags::FOCUS | ListScrollFlags::SELECT,
+                        None,
+                    );
+
+                    let list_view_weak = list_view.downgrade();
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(100),
+                        move || {
+                            if let Some(list_view) = list_view_weak.upgrade() {
+                                list_view.scroll_to(
+                                    selected,
+                                    ListScrollFlags::FOCUS | ListScrollFlags::SELECT,
+                                    None,
+                                );
+                            }
+                        },
+                    );
+                }
+            }
+        }
+    });
 
     glib::MainContext::default().spawn_local(async move {
         match service_c.get_system_fonts().await {
             Ok(fonts) => {
-                let mut store = rows_store_c.borrow_mut();
-                let mut current_row: Option<ListBoxRow> = None;
-                for font_name in fonts.iter() {
-                    let row_box = GtkBox::new(Orientation::Horizontal, 12);
-                    row_box.set_margin_start(12);
-                    row_box.set_margin_end(12);
-                    row_box.set_margin_top(8);
-                    row_box.set_margin_bottom(8);
+                let str_refs: Vec<&str> = fonts.iter().map(|s| s.as_str()).collect();
+                list_c.splice(0, 0, &str_refs);
 
-                    let label = Label::builder()
-                        .label(font_name)
-                        .xalign(0.0)
-                        .hexpand(true)
-                        .build();
+                if let Some(idx) = fonts.iter().position(|f| *f == current_font_startup) {
+                    selection_c.set_selected(idx as u32);
 
-                    let icon = gtk4::Image::from_icon_name("object-select-symbolic");
-                    if font_name != &current_font_c {
-                        icon.set_opacity(0.0);
-                    }
-
-                    row_box.append(&label);
-                    row_box.append(&icon);
-
-                    let row = ListBoxRow::builder().child(&row_box).build();
-
-                    unsafe {
-                        row.set_data("font-name", font_name.clone());
-                    }
-
-                    if font_name == &current_font_c {
-                        current_row = Some(row.clone());
-                    }
-
-                    list_c.append(&row);
-                    store.push(row);
-                }
-
-                if let Some(row) = current_row {
-                    let row_c = row.clone();
-                    glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
-                        row_c.grab_focus();
-                        glib::ControlFlow::Break
+                    let list_view_weak = list_view_weak.clone();
+                    glib::timeout_add_local_once(std::time::Duration::from_millis(50), move || {
+                        if let Some(list_view) = list_view_weak.upgrade() {
+                            list_view.scroll_to(
+                                idx as u32,
+                                ListScrollFlags::FOCUS | ListScrollFlags::SELECT,
+                                None,
+                            );
+                        }
                     });
-                    list_c.select_row(Some(&row));
                 }
             }
             Err(e) => eprintln!("Failed to load fonts: {}", e),
         }
     });
 
-    let rows_store_c = rows_store.clone();
+    let filter_c = filter.clone();
     search_entry.connect_search_changed(move |entry| {
         let text = entry.text().to_lowercase();
-        if let Ok(store) = rows_store_c.try_borrow() {
-            for row in store.iter() {
-                let visible = if text.is_empty() {
-                    true
-                } else {
-                    unsafe {
-                        if let Some(ptr) = row.data::<String>("font-name") {
-                            let name = ptr.as_ref();
-                            name.to_lowercase().contains(&text)
-                        } else {
-                            true
-                        }
-                    }
-                };
-                row.set_visible(visible);
-            }
-        }
+        filter_c.set_filter_func(move |item| {
+            let string_obj = item.downcast_ref::<gtk4::StringObject>().unwrap();
+            let font_name = string_obj.string().to_lowercase();
+            font_name.contains(&text)
+        });
     });
 
     let service_c = config_service.clone();
-    let rows_store_c = rows_store.clone();
-    font_list.connect_row_selected(move |_, row| {
-        if let Some(row) = row {
-            unsafe {
-                if let Some(ptr) = row.data::<String>("font-name") {
-                    let name = ptr.as_ref();
-                    let mut cfg = service_c.get_config();
-                    update_fn(&mut cfg, name.clone());
-                    let _ = service_c.update_config(cfg);
 
-                    if let Ok(store) = rows_store_c.try_borrow() {
-                        for r in store.iter() {
-                            if let Some(ptr_r) = r.data::<String>("font-name") {
-                                let r_name = ptr_r.as_ref();
-                                let opacity = if *r_name == *name { 1.0 } else { 0.0 };
-                                if let Some(child) = r.child() {
-                                    if let Some(box_) = child.downcast_ref::<GtkBox>() {
-                                        if let Some(last) = box_.last_child() {
-                                            if let Some(icon) = last.downcast_ref::<gtk4::Image>() {
-                                                icon.set_opacity(opacity);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    selection_model.connect_selected_item_notify(move |model| {
+        if let Some(item) = model.selected_item() {
+            let string_obj = item.downcast::<gtk4::StringObject>().unwrap();
+            let name = string_obj.string();
+
+            let mut cfg = service_c.get_config();
+            update_fn(&mut cfg, name.to_string());
+            let _ = service_c.update_config(cfg);
         }
     });
 
-    font_scroll.set_child(Some(&font_list));
+    font_scroll.set_child(Some(&list_view));
     type_section.append(&font_scroll);
     parent.append(&type_section);
 }
@@ -1141,120 +1146,143 @@ where
         .overflow(Overflow::Hidden)
         .build();
 
-    let pack_list = ListBox::builder()
-        .selection_mode(SelectionMode::Single)
-        .css_classes(vec!["navigation-sidebar"])
-        .build();
-    let pack_list_c = pack_list.clone();
+    let pack_list = ListView::new(None::<SelectionModel>, None::<ListItemFactory>);
+    pack_list.add_css_class("navigation-sidebar");
+
+    let string_list = StringList::new(&[]);
+    let filter = CustomFilter::new(move |_item| true);
+    let filter_model = FilterListModel::new(Some(string_list.clone()), Some(filter.clone()));
+    let selection_model = SingleSelection::new(Some(filter_model.clone()));
+
+    let factory = SignalListItemFactory::new();
+    let display_names = Rc::new(RefCell::new(HashMap::<String, String>::new()));
+
+    factory.connect_setup(move |_, list_item| {
+        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let row_box = GtkBox::new(Orientation::Horizontal, 12);
+        row_box.set_margin_start(12);
+        row_box.set_margin_end(12);
+        row_box.set_margin_top(8);
+        row_box.set_margin_bottom(8);
+
+        let label = Label::builder().xalign(0.0).hexpand(true).build();
+
+        row_box.append(&label);
+
+        list_item.set_child(Some(&row_box));
+    });
+
+    let display_names_c = display_names.clone();
+    factory.connect_bind(move |_, list_item| {
+        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let string_obj = list_item
+            .item()
+            .and_downcast::<gtk4::StringObject>()
+            .unwrap();
+        let pack_id = string_obj.string();
+
+        let row_box = list_item.child().and_downcast::<GtkBox>().unwrap();
+        let label = row_box.first_child().and_downcast::<Label>().unwrap();
+
+        let name = if let Ok(map) = display_names_c.try_borrow() {
+            let map: &HashMap<String, String> = &*map;
+            map.get(pack_id.as_str())
+                .cloned()
+                .unwrap_or_else(|| pack_id.to_string())
+        } else {
+            pack_id.to_string()
+        };
+
+        label.set_label(&name);
+    });
+
+    pack_list.set_model(Some(&selection_model));
+    pack_list.set_factory(Some(&factory));
 
     let current_pack = config.sound_pack.clone();
-    let rows_store = Rc::new(RefCell::new(Vec::<ListBoxRow>::new()));
-    let rows_store_c = rows_store.clone();
+    let list_c = string_list.clone();
+    let selection_c = selection_model.clone();
+    let pack_list_weak = pack_list.downgrade();
+    let display_names_c = display_names.clone();
+
+    pack_list.connect_map(move |pack_list| {
+        if let Some(model) = pack_list.model() {
+            if let Some(selection_model) = model.downcast_ref::<SingleSelection>() {
+                let selected = selection_model.selected();
+                if selected != gtk4::INVALID_LIST_POSITION {
+                    pack_list.scroll_to(
+                        selected,
+                        ListScrollFlags::FOCUS | ListScrollFlags::SELECT,
+                        None,
+                    );
+
+                    let pack_list_weak = pack_list.downgrade();
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(100),
+                        move || {
+                            if let Some(pack_list) = pack_list_weak.upgrade() {
+                                pack_list.scroll_to(
+                                    selected,
+                                    ListScrollFlags::FOCUS | ListScrollFlags::SELECT,
+                                    None,
+                                );
+                            }
+                        },
+                    );
+                }
+            }
+        }
+    });
 
     let packs_future = async move { SoundPackLoader::list_available_packs() };
 
     glib::MainContext::default().spawn_local(async move {
         let packs = packs_future.await;
-        let mut store = rows_store_c.borrow_mut();
-        let mut current_row: Option<ListBoxRow> = None;
 
-        for (pack_id, pack_name) in packs.iter() {
-            let row_box = GtkBox::new(Orientation::Horizontal, 12);
-            row_box.set_margin_start(12);
-            row_box.set_margin_end(12);
-            row_box.set_margin_top(8);
-            row_box.set_margin_bottom(8);
-
-            let label = Label::builder()
-                .label(pack_name)
-                .xalign(0.0)
-                .hexpand(true)
-                .build();
-
-            let icon = gtk4::Image::from_icon_name("object-select-symbolic");
-            if *pack_id != current_pack {
-                icon.set_opacity(0.0);
+        {
+            let mut map = display_names_c.borrow_mut();
+            for (id, name) in &packs {
+                map.insert(id.clone(), name.clone());
             }
-
-            row_box.append(&label);
-            row_box.append(&icon);
-
-            let row = ListBoxRow::builder().child(&row_box).build();
-
-            unsafe {
-                row.set_data("pack-id", pack_id.clone());
-                row.set_data("pack-name", pack_name.clone());
-            }
-
-            if *pack_id == current_pack {
-                current_row = Some(row.clone());
-            }
-
-            pack_list_c.append(&row);
-            store.push(row);
         }
 
-        if let Some(row) = current_row {
-            let row_c = row.clone();
-            glib::idle_add_local(move || {
-                row_c.grab_focus();
-                glib::ControlFlow::Break
+        let ids: Vec<&str> = packs.iter().map(|(id, _)| id.as_str()).collect();
+        list_c.splice(0, 0, &ids);
+
+        if let Some(idx) = packs.iter().position(|(id, _)| *id == current_pack) {
+            selection_c.set_selected(idx as u32);
+
+            let pack_list_weak = pack_list_weak.clone();
+            glib::timeout_add_local_once(std::time::Duration::from_millis(50), move || {
+                if let Some(pack_list) = pack_list_weak.upgrade() {
+                    pack_list.scroll_to(
+                        idx as u32,
+                        ListScrollFlags::FOCUS | ListScrollFlags::SELECT,
+                        None,
+                    );
+                }
             });
-            pack_list_c.select_row(Some(&row));
         }
     });
 
-    let rows_store_c = rows_store.clone();
+    let filter_c = filter.clone();
     search_entry.connect_search_changed(move |entry| {
         let text = entry.text().to_lowercase();
-        if let Ok(store) = rows_store_c.try_borrow() {
-            for row in store.iter() {
-                let visible = if text.is_empty() {
-                    true
-                } else {
-                    unsafe {
-                        if let Some(ptr) = row.data::<String>("pack-name") {
-                            let name = ptr.as_ref();
-                            name.to_lowercase().contains(&text)
-                        } else {
-                            true
-                        }
-                    }
-                };
-                row.set_visible(visible);
-            }
-        }
+        filter_c.set_filter_func(move |item| {
+            let string_obj = item.downcast_ref::<gtk4::StringObject>().unwrap();
+            let pack_id = string_obj.string().to_lowercase();
+            pack_id.contains(&text)
+        });
     });
 
     let update_c = update_fn.clone();
-    let rows_store_c = rows_store.clone();
-    pack_list.connect_row_selected(move |_, row| {
-        if let Some(row) = row {
-            unsafe {
-                if let Some(ptr) = row.data::<String>("pack-id") {
-                    let id = ptr.as_ref();
-                    let id_clone = id.clone();
-                    update_c(Box::new(move |cfg| cfg.sound_pack = id_clone.clone()));
+    selection_model.connect_selected_item_notify(move |model| {
+        if let Some(item) = model.selected_item() {
+            let string_obj = item.downcast::<gtk4::StringObject>().unwrap();
+            let id = string_obj.string();
+            let id_clone = id.clone();
 
-                    if let Ok(store) = rows_store_c.try_borrow() {
-                        for r in store.iter() {
-                            if let Some(ptr_r) = r.data::<String>("pack-id") {
-                                let r_id = ptr_r.as_ref();
-                                let opacity = if *r_id == *id { 1.0 } else { 0.0 };
-                                if let Some(child) = r.child() {
-                                    if let Some(box_) = child.downcast_ref::<GtkBox>() {
-                                        if let Some(last) = box_.last_child() {
-                                            if let Some(icon) = last.downcast_ref::<gtk4::Image>() {
-                                                icon.set_opacity(opacity);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            update_c(Box::new(move |cfg| cfg.sound_pack = id_clone.to_string()));
         }
     });
 

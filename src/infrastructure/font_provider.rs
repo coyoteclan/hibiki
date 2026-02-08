@@ -19,6 +19,7 @@ static SYSTEM_FONTS: Lazy<Result<Arc<Vec<String>>, String>> = Lazy::new(|| {
         Ok(mut families) => {
             families.sort();
             families.dedup();
+            families.shrink_to_fit();
             Ok(Arc::new(families))
         }
         Err(e) => Err(format!("Font discovery failed: {e}")),

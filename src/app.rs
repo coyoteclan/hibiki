@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
@@ -31,7 +31,7 @@ pub struct App {
     gtk_app: Application,
     config_service: ConfigService,
     #[allow(dead_code)]
-    audio_engine: Option<AudioEngine>,
+    audio_engine: Arc<Mutex<Option<AudioEngine>>>,
     audio_dispatcher: Option<AudioDispatcher>,
 }
 
@@ -50,6 +50,7 @@ struct RuntimeState {
     drag_controllers: Vec<gtk4::EventController>,
     css_provider: Option<CssProvider>,
     audio_dispatcher: Option<AudioDispatcher>,
+    audio_engine: Option<AudioEngine>,
 }
 
 impl App {
@@ -70,7 +71,7 @@ impl App {
         Self {
             gtk_app,
             config_service,
-            audio_engine,
+            audio_engine: Arc::new(Mutex::new(audio_engine)),
             audio_dispatcher,
         }
     }
@@ -79,14 +80,17 @@ impl App {
     pub fn run_with_tray(self, tray_rx: Receiver<TrayAction>, tray_handle: TrayHandle) -> i32 {
         let config_service = self.config_service.clone();
         let audio_dispatcher = self.audio_dispatcher.clone();
+        let audio_engine_container = self.audio_engine.clone();
 
         self.gtk_app.connect_activate(move |app| {
+            let audio_engine = audio_engine_container.lock().unwrap().take();
             activate(
                 app,
                 &config_service,
                 tray_rx.clone(),
                 tray_handle.clone(),
                 audio_dispatcher.clone(),
+                audio_engine,
             );
         });
 
@@ -99,9 +103,11 @@ impl App {
     pub fn run(self) -> i32 {
         let config_service = self.config_service.clone();
         let audio_dispatcher = self.audio_dispatcher.clone();
+        let audio_engine_container = self.audio_engine.clone();
 
         self.gtk_app.connect_activate(move |app| {
-            activate_without_tray(app, &config_service, audio_dispatcher.clone());
+            let audio_engine = audio_engine_container.lock().unwrap().take();
+            activate_without_tray(app, &config_service, audio_dispatcher.clone(), audio_engine);
         });
 
         let exit_code = self.gtk_app.run_with_args::<&str>(&[]);
@@ -115,12 +121,14 @@ fn activate_without_tray(
     app: &Application,
     config_service: &ConfigService,
     audio_dispatcher: Option<AudioDispatcher>,
+    audio_engine: Option<AudioEngine>,
 ) {
     info!("Activating keystroke application (no tray)");
 
     let state = Rc::new(RefCell::new(RuntimeState::default()));
     state.borrow_mut().feedback_service = Some(FeedbackService::new(app));
     state.borrow_mut().audio_dispatcher = audio_dispatcher;
+    state.borrow_mut().audio_engine = audio_engine;
 
     let config = config_service.get_config();
     {
@@ -147,12 +155,14 @@ fn activate(
     tray_rx: Receiver<TrayAction>,
     tray_handle: TrayHandle,
     audio_dispatcher: Option<AudioDispatcher>,
+    audio_engine: Option<AudioEngine>,
 ) {
     info!("Activating keystroke application");
 
     let state = Rc::new(RefCell::new(RuntimeState::default()));
     state.borrow_mut().feedback_service = Some(FeedbackService::new(app));
     state.borrow_mut().audio_dispatcher = audio_dispatcher;
+    state.borrow_mut().audio_engine = audio_engine;
 
     let config = config_service.get_config();
     {
@@ -380,6 +390,10 @@ fn start_keystroke_mode(
 
     let config = config_service.get_config();
 
+    if let Some(engine) = state.borrow_mut().audio_engine.as_mut() {
+        engine.start();
+    }
+
     if let Some(dispatcher) = &state.borrow().audio_dispatcher {
         let current_pack = dispatcher.get_current_pack_name();
         let target_pack = &config.audio.sound_pack;
@@ -586,6 +600,10 @@ fn start_bubble_mode(
     info!("Starting bubble mode");
 
     let config = config_service.get_config();
+
+    if let Some(engine) = state.borrow_mut().audio_engine.as_mut() {
+        engine.start();
+    }
 
     if let Some(dispatcher) = &state.borrow().audio_dispatcher {
         dispatcher.set_enabled(config.bubble.audio.enabled);

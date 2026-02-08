@@ -49,7 +49,7 @@ impl ChatBubble {
         label.add_css_class("bubble");
 
         Self {
-            text: String::new(),
+            text: String::with_capacity(64),
             last_modified: Instant::now(),
             label,
         }
@@ -194,7 +194,7 @@ impl BubbleDisplayWidget {
 
         Self {
             container,
-            bubbles: VecDeque::new(),
+            bubbles: VecDeque::with_capacity(MAX_BUBBLES),
             display_duration: Duration::from_millis(display_timeout_ms),
             new_bubble_timeout: Duration::from_millis(NEW_BUBBLE_TIMEOUT_MS),
             modifiers: ModifierState::default(),

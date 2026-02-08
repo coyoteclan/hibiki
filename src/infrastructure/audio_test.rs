@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::infrastructure::audio::{AudioBuffer, SoundPackLoader};
+    use hound;
     use std::fs::File;
     use std::io::Write;
     use std::sync::Arc;
@@ -26,38 +27,45 @@ mod tests {
         let mut file = File::create(&config_path).unwrap();
         file.write_all(config_content.as_bytes()).unwrap();
 
-        let header_spec = hound::WavSpec {
-            channels: 2,
+        let spec = hound::WavSpec {
+            channels: 1,
             sample_rate: 44100,
             bits_per_sample: 16,
             sample_format: hound::SampleFormat::Int,
         };
-        let mut writer = hound::WavWriter::create(&sound_path, header_spec).unwrap();
+        let mut writer = hound::WavWriter::create(&sound_path, spec).unwrap();
         for _ in 0..100 {
             writer.write_sample(0i16).unwrap();
         }
         writer.finalize().unwrap();
 
-        let pack = SoundPackLoader::load_from_directory(dir.path()).expect("Failed to load pack");
+        let pack = SoundPackLoader::load_from_directory(dir.path());
+
+        let pack = pack.expect("Failed to load pack");
 
         assert_eq!(pack.config.id, "test");
-        assert!(pack.buffers.contains_key("main"));
+        assert!(pack.buffers.get("main").is_some());
 
         let buffer = pack.buffers.get("main").unwrap();
         assert_eq!(buffer.samples.len(), 100);
     }
 
     #[test]
-    fn test_audio_buffer_source_f32() {
-        let samples: Arc<[f32]> = Arc::new([0.0, 0.5, 1.0, -0.5]);
+    fn test_audio_buffer_conversion() {
+        let samples: Arc<[i16]> = Arc::new([0, 16383, 32767, -16384]);
         let buffer = AudioBuffer {
             samples: samples.clone(),
             sample_rate: 44100,
-            channels: 2,
+            channels: 1,
         };
 
         let source = buffer.to_source();
         let collected: Vec<f32> = source.collect();
-        assert_eq!(collected, vec![0.0, 0.5, 1.0, -0.5]);
+
+        assert_eq!(collected.len(), 4);
+        assert!((collected[0] - 0.0).abs() < 0.001);
+        assert!((collected[1] - 0.5).abs() < 0.001);
+        assert!((collected[2] - 1.0).abs() < 0.001);
+        assert!((collected[3] + 0.5).abs() < 0.001);
     }
 }
