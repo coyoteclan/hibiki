@@ -408,7 +408,7 @@ fn create_keystroke_settings(
         .build();
 
     let val_label = Label::builder()
-        .label(&format!("{:.1}x", config.font_size))
+        .label(format!("{:.1}x", config.font_size))
         .css_classes(vec!["badge"])
         .build();
 
@@ -475,7 +475,7 @@ fn create_keystroke_settings(
         .build();
 
     let dur_val_label = Label::builder()
-        .label(&format!(
+        .label(format!(
             "{:.1}s",
             config.display_timeout_ms as f64 / 1000.0
         ))
@@ -517,10 +517,8 @@ fn create_keystroke_settings(
 
     let step_minus = Button::builder().label("-").width_request(32).build();
 
-    // Middle display - use a label in a box or just a non-clickable button for style consistency
-    // To match the "segmented" look perfectly, a button with no action is easiest.
     let step_display = Button::builder()
-        .label(&config.max_keys.to_string())
+        .label(config.max_keys.to_string())
         .width_request(40)
         .can_focus(false)
         .build();
@@ -580,7 +578,7 @@ fn create_keystroke_settings(
         .xalign(0.0)
         .build();
     let hk1_btn = Button::builder()
-        .label(&format_hotkey(&config.keystroke_hotkey))
+        .label(format_hotkey(&config.keystroke_hotkey))
         .valign(Align::Center)
         .build();
     hk1_box.append(&hk1_lbl);
@@ -595,7 +593,7 @@ fn create_keystroke_settings(
         .xalign(0.0)
         .build();
     let hk2_btn = Button::builder()
-        .label(&format_hotkey(&config.pause_hotkey))
+        .label(format_hotkey(&config.pause_hotkey))
         .valign(Align::Center)
         .build();
     hk2_box.append(&hk2_lbl);
@@ -799,7 +797,7 @@ fn create_bubble_settings(
         .build();
 
     let val_label = Label::builder()
-        .label(&format!("{:.1}x", config.bubble.font_size))
+        .label(format!("{:.1}x", config.bubble.font_size))
         .css_classes(vec!["badge"])
         .build();
 
@@ -866,7 +864,7 @@ fn create_bubble_settings(
         .build();
 
     let dur_val_label = Label::builder()
-        .label(&format!("{:.1}s", config.bubble.timeout_ms as f64 / 1000.0))
+        .label(format!("{:.1}s", config.bubble.timeout_ms as f64 / 1000.0))
         .css_classes(vec!["badge"])
         .build();
 
@@ -937,7 +935,7 @@ fn create_bubble_settings(
         .xalign(0.0)
         .build();
     let hk1_btn = Button::builder()
-        .label(&format_hotkey(&config.bubble.hotkey))
+        .label(format_hotkey(&config.bubble.hotkey))
         .valign(Align::Center)
         .build();
     hk1_box.append(&hk1_lbl);
@@ -952,7 +950,7 @@ fn create_bubble_settings(
         .xalign(0.0)
         .build();
     let hk2_btn = Button::builder()
-        .label(&format_hotkey(&config.toggle_focus_hotkey))
+        .label(format_hotkey(&config.toggle_focus_hotkey))
         .valign(Align::Center)
         .build();
     hk2_box.append(&hk2_lbl);
@@ -1283,7 +1281,7 @@ where
         .build();
 
     let vol_val_label = Label::builder()
-        .label(&format!("{:.0}%", config.volume * 100.0))
+        .label(format!("{:.0}%", config.volume * 100.0))
         .css_classes(vec!["badge"])
         .build();
 

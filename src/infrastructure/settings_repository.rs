@@ -4,30 +4,53 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub struct SettingsRepository {
-    config_path: PathBuf,
+    config_dir: PathBuf,
 }
 
 impl SettingsRepository {
     pub fn new() -> Result<Self> {
-        let config_dir = dirs::config_dir().context("Could not determine config directory")?;
-        let config_path = config_dir.join("keystroke").join("config.json");
-        Ok(Self { config_path })
+        let config_dir = dirs::config_dir()
+            .context("Could not determine config directory")?
+            .join("keystroke");
+        Ok(Self { config_dir })
     }
 
-    pub fn with_path(config_path: PathBuf) -> Self {
-        Self { config_path }
+    pub fn with_dir(config_dir: PathBuf) -> Self {
+        Self { config_dir }
     }
 
     pub fn load(&self) -> Result<KeystrokeConfig> {
-        if self.config_path.exists() {
-            let content = fs::read_to_string(&self.config_path)
-                .with_context(|| format!("Failed to read config: {:?}", self.config_path))?;
+        let toml_path = self.config_dir.join("config.toml");
+        let json_path = self.config_dir.join("config.json");
+
+        if toml_path.exists() {
+            let content = fs::read_to_string(&toml_path)
+                .with_context(|| format!("Failed to read config: {:?}", toml_path))?;
             let config: KeystrokeConfig =
-                serde_json::from_str(&content).with_context(|| "Failed to parse config file")?;
-            info!("Loaded configuration from {:?}", self.config_path);
+                toml::from_str(&content).with_context(|| "Failed to parse TOML config file")?;
+            info!("Loaded configuration from {:?}", toml_path);
+            Ok(config)
+        } else if json_path.exists() {
+            info!(
+                "Found legacy JSON config at {:?}, migrating to TOML...",
+                json_path
+            );
+            let content = fs::read_to_string(&json_path)
+                .with_context(|| format!("Failed to read legacy config: {:?}", json_path))?;
+            let config: KeystrokeConfig = serde_json::from_str(&content)
+                .with_context(|| "Failed to parse legacy JSON config")?;
+
+            self.save(&config)?;
+
+            if let Err(e) = fs::remove_file(&json_path) {
+                warn!("Failed to remove legacy config file {:?}: {}", json_path, e);
+            } else {
+                info!("Successfully migrated and removed legacy config file");
+            }
+
             Ok(config)
         } else {
             debug!("No config file found, using defaults");
@@ -36,26 +59,27 @@ impl SettingsRepository {
     }
 
     pub fn save(&self, config: &KeystrokeConfig) -> Result<()> {
-        if let Some(parent) = self.config_path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config dir: {:?}", parent))?;
+        if !self.config_dir.exists() {
+            fs::create_dir_all(&self.config_dir)
+                .with_context(|| format!("Failed to create config dir: {:?}", self.config_dir))?;
         }
 
-        let content = serde_json::to_string_pretty(config).context("Failed to serialize config")?;
+        let content =
+            toml::to_string_pretty(config).context("Failed to serialize config to TOML")?;
+        let toml_path = self.config_dir.join("config.toml");
 
-        let parent = self.config_path.parent().unwrap_or(&self.config_path);
-        let mut temp_file = NamedTempFile::new_in(parent)
-            .with_context(|| format!("Failed to create temp file in {:?}", parent))?;
+        let mut temp_file = NamedTempFile::new_in(&self.config_dir)
+            .with_context(|| format!("Failed to create temp file in {:?}", self.config_dir))?;
 
         temp_file
             .write_all(content.as_bytes())
             .context("Failed to write to temp config file")?;
 
         temp_file
-            .persist(&self.config_path)
-            .with_context(|| format!("Failed to persist config to {:?}", self.config_path))?;
+            .persist(&toml_path)
+            .with_context(|| format!("Failed to persist config to {:?}", toml_path))?;
 
-        info!("Saved configuration to {:?}", self.config_path);
+        info!("Saved configuration to {:?}", toml_path);
         Ok(())
     }
 }
