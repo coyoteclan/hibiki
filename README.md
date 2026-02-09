@@ -29,25 +29,29 @@ And yes, it's written in Rust, so you already know it's blazing fast and memory-
 
 Keystroke attempts to automatically detect your running compositor.
 
-| Compositor | Support Level | Notes |
-|------------|---------------|-------|
-| **Niri** | 🟢 **Tested & Working** | Fully supported layout detection and event handling. |
-| **Hyprland** | 🟡 **Experimental** | Implemented but needs community testing. |
-| **Sway** | 🟡 **Experimental** | Implemented but needs community testing. |
-| **River/DWL** | 🔴 **Basic/None** | Layout detection may fail; "Basic support" is minimal. |
+| Compositor    | Support Level           | Notes                                                  |
+| ------------- | ----------------------- | ------------------------------------------------------ |
+| **Niri**      | 🟢 **Tested & Working** | Fully supported layout detection and event handling.   |
+| **Hyprland**  | 🟡 **Experimental**     | Implemented but needs community testing.               |
+| **Sway**      | 🟡 **Experimental**     | Implemented but needs community testing.               |
+| **River/DWL** | 🔴 **Basic/None**       | Layout detection may fail; "Basic support" is minimal. |
 
 > **Note**: Real compositor support is complex! I can't detect layouts reliably on all compositors without specific implementations. **I need help testing Hyprland and Sway!** If you use these, please report issues.
 
 ## Installation
 
 ### Prerequisites
+
 You need a Wayland compositor and the following system libraries:
+
 - `libgtk-4-dev`
 - `libgtk4-layer-shell-dev`
 - `libasound2-dev` (for audio)
 
 ### Via Cargo
+
 If you have Rust installed:
+
 ```bash
 cargo install --path .
 # or
@@ -55,7 +59,9 @@ cargo run --release
 ```
 
 ### Via Nix
+
 Flake support is included!
+
 ```bash
 # Run directly
 nix run github:linuxmobile/keystroke
@@ -72,17 +78,21 @@ nix develop
 The project is currently in **Early WIP**.
 
 ### 🛑 We Need Your Help!
+
 1.  **Compositor Testing**: We specifically need testers for **Hyprland** and **Sway**. The code is there, but I only use Niri.
 2.  **Packaging**: We need maintainers for **AUR**, **Debian/Ubuntu**, **Fedora**, etc.
 3.  **Feedback**: Found a bug? Open an issue!
 
 ### Development
+
 1.  Clone the repo.
 2.  Run `cargo run` to start dev mode.
 3.  Check `src/compositor` to understand how we handle different Wayland protocols.
 
 ---
+
 If you find this useful, I'd really appreciate it if you could:
+
 - ⭐ Drop a star on the repo!
 - 💡 Open an Issue with ideas.
 - 🛠️ Submit a PR.
