@@ -37,17 +37,12 @@ impl FontProvider {
     /// Returns `FontError::DiscoveryFailed` if the underlying font system fails to list families.
     /// Returns `FontError::ConfigFailed` if the async channel operation fails.
     pub async fn load_system_fonts_asynchronous() -> Result<Arc<Vec<String>>, FontError> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        std::thread::spawn(move || {
-            let result = match &*SYSTEM_FONTS {
-                Ok(fonts) => Ok(fonts.clone()),
-                Err(_) => Err(FontError::DiscoveryFailed),
-            };
-            let _ = tx.send(result);
-        });
-
-        rx.await.map_err(|_| FontError::ConfigFailed)?
+        tokio::task::spawn_blocking(move || match &*SYSTEM_FONTS {
+            Ok(fonts) => Ok(fonts.clone()),
+            Err(_) => Err(FontError::DiscoveryFailed),
+        })
+        .await
+        .map_err(|_| FontError::ConfigFailed)?
     }
 
     /// Validate if a font family exists
