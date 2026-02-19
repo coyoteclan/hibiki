@@ -129,16 +129,6 @@ impl KeyListener {
             control_txs,
         })
     }
-
-    #[allow(dead_code)]
-    pub fn stop(&self) {
-        self.running.store(false, Ordering::SeqCst);
-    }
-
-    #[allow(dead_code)]
-    pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
-    }
 }
 
 fn listen_to_device(
