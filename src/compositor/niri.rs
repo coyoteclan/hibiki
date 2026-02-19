@@ -1,8 +1,43 @@
 use super::{CompositorClient, KeyboardLayouts, LayoutEvent};
+use serde::Deserialize;
 use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+enum NiriMessage {
+    Ok(serde_json::Value),
+    Event(NiriEvent),
+    Handled,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+enum NiriResponse {
+    KeyboardLayouts(NiriKeyboardLayouts),
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+enum NiriEvent {
+    KeyboardLayoutSwitched {
+        idx: usize,
+    },
+    #[serde(rename_all = "snake_case")]
+    KeyboardLayoutsChanged {
+        layouts: NiriKeyboardLayouts,
+    },
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct NiriKeyboardLayouts {
+    #[serde(default)]
+    names: Vec<String>,
+    #[serde(default)]
+    current_idx: usize,
+}
 
 #[derive(Debug)]
 pub struct NiriClient {
@@ -40,85 +75,37 @@ impl NiriClient {
     }
 
     fn parse_layouts_response(&self, json: &str) -> KeyboardLayouts {
-        let mut layouts = KeyboardLayouts::default();
-
-        if let Some(names) = self.extract_names_array(json) {
-            layouts.names = names;
-        }
-
-        if let Some(idx) = self.extract_current_idx(json) {
-            layouts.current_idx = idx;
-        }
-
-        layouts
-    }
-
-    fn extract_names_array(&self, json: &str) -> Option<Vec<String>> {
-        let key = "\"names\"";
-        let key_pos = json.find(key)?;
-        let after_key = &json[key_pos + key.len()..];
-
-        let bracket_start = after_key.find('[')?;
-        let array_content_start = &after_key[bracket_start + 1..];
-
-        let bracket_end = array_content_start.find(']')?;
-        let array_content = &array_content_start[..bracket_end];
-
-        let mut names = Vec::new();
-        let mut in_string = false;
-        let mut escape_next = false;
-        let mut current = String::new();
-
-        for ch in array_content.chars() {
-            if escape_next {
-                current.push(ch);
-                escape_next = false;
-                continue;
-            }
-
-            match ch {
-                '\\' if in_string => {
-                    escape_next = true;
-                }
-                '"' if !in_string => {
-                    in_string = true;
-                    current.clear();
-                }
-                '"' if in_string => {
-                    in_string = false;
-                    if !current.is_empty() {
-                        names.push(current.clone());
+        if let Ok(msg) = serde_json::from_str::<NiriMessage>(json) {
+            match msg {
+                NiriMessage::Ok(v) => {
+                    if let Ok(NiriResponse::KeyboardLayouts(l)) =
+                        serde_json::from_value::<NiriResponse>(v)
+                    {
+                        return KeyboardLayouts {
+                            names: l.names,
+                            current_idx: l.current_idx,
+                        };
                     }
                 }
-                _ if in_string => {
-                    current.push(ch);
+                NiriMessage::Event(NiriEvent::KeyboardLayoutsChanged { layouts: l }) => {
+                    return KeyboardLayouts {
+                        names: l.names,
+                        current_idx: l.current_idx,
+                    };
                 }
                 _ => {}
             }
         }
 
-        if names.is_empty() {
-            None
-        } else {
-            Some(names)
+        // Fallback for raw layouts or fragments (used in some tests)
+        if let Ok(l) = serde_json::from_str::<NiriKeyboardLayouts>(json) {
+            return KeyboardLayouts {
+                names: l.names,
+                current_idx: l.current_idx,
+            };
         }
-    }
 
-    fn extract_current_idx(&self, json: &str) -> Option<usize> {
-        let key = "\"current_idx\"";
-        let key_pos = json.find(key)?;
-        let after_key = &json[key_pos + key.len()..];
-
-        let colon_pos = after_key.find(':')?;
-        let after_colon = &after_key[colon_pos + 1..];
-
-        let num_str: String = after_colon
-            .chars()
-            .skip_while(|c| c.is_whitespace())
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
-
-        num_str.parse().ok()
+        KeyboardLayouts::default()
     }
 
     pub fn subscribe_events(&self) -> anyhow::Result<BufReader<UnixStream>> {
@@ -132,49 +119,33 @@ impl NiriClient {
         let mut ack = String::new();
         reader.read_line(&mut ack)?;
 
-        if !ack.contains("\"Ok\"") && !ack.contains("\"Handled\"") {
-            anyhow::bail!("Failed to subscribe to Niri events: {}", ack.trim());
+        match serde_json::from_str::<NiriMessage>(&ack) {
+            Ok(NiriMessage::Ok(_)) | Ok(NiriMessage::Handled) => Ok(reader),
+            _ => anyhow::bail!("Failed to subscribe to Niri events: {}", ack.trim()),
         }
-
-        Ok(reader)
     }
 
     #[must_use]
     pub fn parse_event(&self, line: &str) -> Option<LayoutEvent> {
-        if line.contains("\"KeyboardLayoutSwitched\"") {
-            if let Some(idx) = self.extract_event_layout_index(line) {
-                return Some(LayoutEvent::LayoutSwitched {
-                    name: String::new(),
-                    index: idx,
-                });
+        if let Ok(NiriMessage::Event(event)) = serde_json::from_str::<NiriMessage>(line) {
+            match event {
+                NiriEvent::KeyboardLayoutSwitched { idx } => {
+                    return Some(LayoutEvent::LayoutSwitched {
+                        name: String::new(),
+                        index: idx,
+                    });
+                }
+                NiriEvent::KeyboardLayoutsChanged { layouts } => {
+                    return Some(LayoutEvent::LayoutsChanged {
+                        layouts: KeyboardLayouts {
+                            names: layouts.names,
+                            current_idx: layouts.current_idx,
+                        },
+                    });
+                }
             }
         }
-
-        if line.contains("\"KeyboardLayoutsChanged\"") {
-            let layouts = self.parse_layouts_response(line);
-            if !layouts.is_empty() {
-                return Some(LayoutEvent::LayoutsChanged { layouts });
-            }
-        }
-
         None
-    }
-
-    fn extract_event_layout_index(&self, json: &str) -> Option<usize> {
-        let key = "\"idx\"";
-        let key_pos = json.find(key)?;
-        let after_key = &json[key_pos + key.len()..];
-
-        let colon_pos = after_key.find(':')?;
-        let after_colon = &after_key[colon_pos + 1..];
-
-        let num_str: String = after_colon
-            .chars()
-            .skip_while(|c| c.is_whitespace())
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
-
-        num_str.parse().ok()
     }
 }
 
@@ -230,14 +201,12 @@ mod tests {
         let client = create_test_client();
 
         let json = r#"{"names":["English","Deutsch","Francais"]}"#;
-        let names = client.extract_names_array(json);
+        let layouts = client.parse_layouts_response(json);
 
-        assert!(names.is_some());
-        let names = names.unwrap();
-        assert_eq!(names.len(), 3);
-        assert_eq!(names[0], "English");
-        assert_eq!(names[1], "Deutsch");
-        assert_eq!(names[2], "Francais");
+        assert_eq!(layouts.names.len(), 3);
+        assert_eq!(layouts.names[0], "English");
+        assert_eq!(layouts.names[1], "Deutsch");
+        assert_eq!(layouts.names[2], "Francais");
     }
 
     #[test]
@@ -245,13 +214,11 @@ mod tests {
         let client = create_test_client();
 
         let json = r#"{"names":["English (US)","German (Qwertz)"]}"#;
-        let names = client.extract_names_array(json);
+        let layouts = client.parse_layouts_response(json);
 
-        assert!(names.is_some());
-        let names = names.unwrap();
-        assert_eq!(names.len(), 2);
-        assert_eq!(names[0], "English (US)");
-        assert_eq!(names[1], "German (Qwertz)");
+        assert_eq!(layouts.names.len(), 2);
+        assert_eq!(layouts.names[0], "English (US)");
+        assert_eq!(layouts.names[1], "German (Qwertz)");
     }
 
     #[test]
@@ -259,8 +226,8 @@ mod tests {
         let client = create_test_client();
 
         let json = r#"{"current_idx":2}"#;
-        let idx = client.extract_current_idx(json);
-        assert_eq!(idx, Some(2));
+        let layouts = client.parse_layouts_response(json);
+        assert_eq!(layouts.current_idx, 2);
     }
 
     #[test]
