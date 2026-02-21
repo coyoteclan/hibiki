@@ -323,6 +323,10 @@ impl LayoutManager {
                 Err(_) => continue,
             };
 
+            if payload_len > crate::compositor::sway::MAX_IPC_PAYLOAD_SIZE {
+                break;
+            }
+
             let mut payload = vec![0u8; payload_len as usize];
             if reader.read_exact(&mut payload).is_err() {
                 break;

@@ -13,12 +13,25 @@ const IPC_GET_INPUTS: u32 = 100;
 #[allow(dead_code)]
 const IPC_SUBSCRIBE: u32 = 2;
 
+pub const MAX_IPC_PAYLOAD_SIZE: u32 = 10 * 1024 * 1024; // 10 MiB
+
 #[derive(Debug)]
 pub struct SwayClient {
     socket_path: String,
 }
 
 impl SwayClient {
+    fn validate_payload_len(len: u32) -> anyhow::Result<usize> {
+        if len > MAX_IPC_PAYLOAD_SIZE {
+            anyhow::bail!(
+                "Sway IPC payload too large: {} bytes (max: {} bytes)",
+                len,
+                MAX_IPC_PAYLOAD_SIZE
+            );
+        }
+        Ok(len as usize)
+    }
+
     #[must_use]
     pub fn new() -> Option<Self> {
         let socket_path = env::var("SWAYSOCK").ok()?;
@@ -62,9 +75,9 @@ impl SwayClient {
             anyhow::bail!("Invalid i3-IPC response: magic mismatch");
         }
 
-        let payload_len = u32::from_le_bytes(resp_header[6..10].try_into()?);
+        let payload_len = Self::validate_payload_len(u32::from_le_bytes(resp_header[6..10].try_into()?))?;
 
-        let mut payload = vec![0u8; payload_len as usize];
+        let mut payload = vec![0u8; payload_len];
         stream.read_exact(&mut payload)?;
 
         String::from_utf8(payload).map_err(Into::into)
@@ -187,8 +200,8 @@ impl SwayClient {
         let mut resp_header = [0u8; IPC_HEADER_SIZE];
         stream.read_exact(&mut resp_header)?;
 
-        let payload_len = u32::from_le_bytes(resp_header[6..10].try_into()?);
-        let mut _response = vec![0u8; payload_len as usize];
+        let payload_len = Self::validate_payload_len(u32::from_le_bytes(resp_header[6..10].try_into()?))?;
+        let mut _response = vec![0u8; payload_len];
         stream.read_exact(&mut _response)?;
 
         Ok(stream)
@@ -287,5 +300,28 @@ mod tests {
         let json = r#"{"xkb_active_layout_index": 2}"#;
         let idx = client.extract_active_layout_index(json);
         assert_eq!(idx, Some(2));
+    }
+
+    #[test]
+    fn test_validate_payload_len() {
+        // Valid length
+        assert!(SwayClient::validate_payload_len(1024).is_ok());
+        assert_eq!(SwayClient::validate_payload_len(1024).unwrap(), 1024);
+
+        // Max length
+        assert!(SwayClient::validate_payload_len(MAX_IPC_PAYLOAD_SIZE).is_ok());
+        assert_eq!(
+            SwayClient::validate_payload_len(MAX_IPC_PAYLOAD_SIZE).unwrap(),
+            MAX_IPC_PAYLOAD_SIZE as usize
+        );
+
+        // Exceeds max length
+        let too_large = MAX_IPC_PAYLOAD_SIZE + 1;
+        let result = SwayClient::validate_payload_len(too_large);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Sway IPC payload too large"));
     }
 }
