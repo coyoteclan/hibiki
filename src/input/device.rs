@@ -75,18 +75,18 @@ fn is_keyboard(device: &Device) -> bool {
     false
 }
 
+fn is_virtual(name: &str) -> bool {
+    name.as_bytes()
+        .windows(7)
+        .any(|w| w.eq_ignore_ascii_case(b"virtual"))
+}
+
 #[allow(dead_code)]
 pub fn get_primary_keyboard() -> Result<KeyboardDevice> {
     let keyboards = discover_keyboards()?;
 
-    let physical: Vec<_> = keyboards
-        .iter()
-        .filter(|kb| !kb.name.to_lowercase().contains("virtual"))
-        .cloned()
-        .collect();
-
-    if let Some(keyboard) = physical.into_iter().next() {
-        return Ok(keyboard);
+    if let Some(kb) = keyboards.iter().find(|kb| !is_virtual(&kb.name)) {
+        return Ok(kb.clone());
     }
 
     keyboards
