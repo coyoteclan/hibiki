@@ -76,7 +76,6 @@ pub fn update_css_provider(provider: &CssProvider, config: &Config) {
     provider.load_from_string(&css);
 }
 
-#[allow(dead_code)]
 pub fn update_position(window: &ApplicationWindow, position: Position, margin: i32) {
     info!(
         "Updating window position to: {:?} with margin {}",
