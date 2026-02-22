@@ -1,4 +1,4 @@
-use crate::domain::config::KeystrokeConfig;
+use crate::domain::config::{KeystrokeConfig, Validate};
 use crate::infrastructure::settings_repository::SettingsRepository;
 use anyhow::Result;
 use std::sync::Arc;

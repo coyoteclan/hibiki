@@ -6,6 +6,10 @@ const DEFAULT_BUBBLE_TIMEOUT_MS: u64 = 10000;
 const DEFAULT_MAX_KEYS: usize = 5;
 const DEFAULT_MARGIN: i32 = 20;
 
+pub trait Validate {
+    fn validate(&mut self);
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum DisplayMode {
@@ -99,6 +103,12 @@ pub struct AudioConfig {
     pub sound_pack: String,
 }
 
+impl Validate for AudioConfig {
+    fn validate(&mut self) {
+        self.volume = self.volume.clamp(0.0, 1.0);
+    }
+}
+
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
@@ -120,6 +130,16 @@ pub struct BubbleConfig {
     pub draggable: bool,
     pub hotkey: String,
     pub timeout_ms: u64,
+}
+
+impl Validate for BubbleConfig {
+    fn validate(&mut self) {
+        self.font_size = self.font_size.clamp(1.0, 10.0);
+
+        self.timeout_ms = self.timeout_ms.clamp(100, 30000);
+
+        self.audio.validate();
+    }
 }
 
 impl Default for BubbleConfig {
@@ -182,6 +202,25 @@ pub struct KeystrokeConfig {
     pub audio: AudioConfig,
 }
 
+impl Validate for KeystrokeConfig {
+    fn validate(&mut self) {
+        self.display_timeout_ms = self.display_timeout_ms.clamp(100, 30000);
+
+        self.max_keys = self.max_keys.clamp(1, 50);
+
+        self.font_scale = self.font_scale.clamp(1.0, 10.0);
+
+        self.opacity = self.opacity.clamp(0.0, 1.0);
+
+        self.font_size = self.font_size.clamp(1.0, 10.0);
+
+        self.margin = self.margin.clamp(-100, 1000);
+
+        self.bubble.validate();
+        self.audio.validate();
+    }
+}
+
 impl Default for KeystrokeConfig {
     fn default() -> Self {
         Self {
@@ -206,5 +245,77 @@ impl Default for KeystrokeConfig {
             bubble: BubbleConfig::default(),
             audio: AudioConfig::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_audio_config_validation() {
+        let mut config = AudioConfig {
+            enabled: true,
+            volume: 1.5,
+            sound_pack: "test".to_string(),
+        };
+        config.validate();
+        assert_eq!(config.volume, 1.0);
+
+        config.volume = -0.5;
+        config.validate();
+        assert_eq!(config.volume, 0.0);
+    }
+
+    #[test]
+    fn test_bubble_config_validation() {
+        let mut config = BubbleConfig {
+            font_size: 0.0,
+            timeout_ms: 50,
+            ..Default::default()
+        };
+        config.validate();
+        assert_eq!(config.font_size, 1.0);
+        assert_eq!(config.timeout_ms, 100);
+
+        config.font_size = 15.0;
+        config.timeout_ms = 40000;
+        config.validate();
+        assert_eq!(config.font_size, 10.0);
+        assert_eq!(config.timeout_ms, 30000);
+    }
+
+    #[test]
+    fn test_keystroke_config_validation() {
+        let mut config = KeystrokeConfig {
+            display_timeout_ms: 50,
+            max_keys: 0,
+            font_scale: 0.0,
+            opacity: 1.5,
+            font_size: 0.0,
+            margin: -200,
+            ..Default::default()
+        };
+        config.validate();
+        assert_eq!(config.display_timeout_ms, 100);
+        assert_eq!(config.max_keys, 1);
+        assert_eq!(config.font_scale, 1.0);
+        assert_eq!(config.opacity, 1.0);
+        assert_eq!(config.font_size, 1.0);
+        assert_eq!(config.margin, -100);
+
+        config.display_timeout_ms = 40000;
+        config.max_keys = 100;
+        config.font_scale = 15.0;
+        config.opacity = -0.5;
+        config.font_size = 15.0;
+        config.margin = 1500;
+        config.validate();
+        assert_eq!(config.display_timeout_ms, 30000);
+        assert_eq!(config.max_keys, 50);
+        assert_eq!(config.font_scale, 10.0);
+        assert_eq!(config.opacity, 0.0);
+        assert_eq!(config.font_size, 10.0);
+        assert_eq!(config.margin, 1000);
     }
 }

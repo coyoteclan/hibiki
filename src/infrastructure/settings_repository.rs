@@ -1,4 +1,4 @@
-use crate::domain::config::KeystrokeConfig;
+use crate::domain::config::{KeystrokeConfig, Validate};
 use anyhow::{Context, Result};
 use std::fs;
 use std::io::Write;
@@ -29,8 +29,9 @@ impl SettingsRepository {
         if toml_path.exists() {
             let content = fs::read_to_string(&toml_path)
                 .with_context(|| format!("Failed to read config: {:?}", toml_path))?;
-            let config: KeystrokeConfig =
+            let mut config: KeystrokeConfig =
                 toml::from_str(&content).with_context(|| "Failed to parse TOML config file")?;
+            config.validate();
             info!("Loaded configuration from {:?}", toml_path);
             Ok(config)
         } else if json_path.exists() {
@@ -40,8 +41,9 @@ impl SettingsRepository {
             );
             let content = fs::read_to_string(&json_path)
                 .with_context(|| format!("Failed to read legacy config: {:?}", json_path))?;
-            let config: KeystrokeConfig = serde_json::from_str(&content)
+            let mut config: KeystrokeConfig = serde_json::from_str(&content)
                 .with_context(|| "Failed to parse legacy JSON config")?;
+            config.validate();
 
             self.save(&config)?;
 

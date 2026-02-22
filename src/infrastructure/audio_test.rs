@@ -44,7 +44,7 @@ mod tests {
         let pack = pack.expect("Failed to load pack");
 
         assert_eq!(pack.config.id, "test");
-        assert!(pack.buffers.get("main").is_some());
+        assert!(pack.buffers.contains_key("main"));
 
         let buffer = pack.buffers.get("main").unwrap();
         assert_eq!(buffer.samples.len(), 100);
