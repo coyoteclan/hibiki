@@ -75,7 +75,8 @@ impl SwayClient {
             anyhow::bail!("Invalid i3-IPC response: magic mismatch");
         }
 
-        let payload_len = Self::validate_payload_len(u32::from_le_bytes(resp_header[6..10].try_into()?))?;
+        let payload_len =
+            Self::validate_payload_len(u32::from_le_bytes(resp_header[6..10].try_into()?))?;
 
         let mut payload = vec![0u8; payload_len];
         stream.read_exact(&mut payload)?;
@@ -200,7 +201,8 @@ impl SwayClient {
         let mut resp_header = [0u8; IPC_HEADER_SIZE];
         stream.read_exact(&mut resp_header)?;
 
-        let payload_len = Self::validate_payload_len(u32::from_le_bytes(resp_header[6..10].try_into()?))?;
+        let payload_len =
+            Self::validate_payload_len(u32::from_le_bytes(resp_header[6..10].try_into()?))?;
         let mut _response = vec![0u8; payload_len];
         stream.read_exact(&mut _response)?;
 

@@ -279,7 +279,10 @@ mod additional_tests {
         assert_eq!(map_evdev_to_mechvibes(Key::KEY_HOME.code()), Some(57415));
 
         // Test Modifiers
-        assert_eq!(map_evdev_to_mechvibes(Key::KEY_RIGHTCTRL.code()), Some(57373));
+        assert_eq!(
+            map_evdev_to_mechvibes(Key::KEY_RIGHTCTRL.code()),
+            Some(57373)
+        );
 
         // Test non-mapped key (should return None)
         assert_eq!(map_evdev_to_mechvibes(Key::KEY_A.code()), None);

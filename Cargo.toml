@@ -41,6 +41,7 @@ font-kit = "0.14.3"
 once_cell = "1.21.3"
 cpal = { version = "0.16", features = ["jack"] }
 rodio = "0.21.1"
+parking_lot = "0.12"
 
 [profile.release]
 lto = true

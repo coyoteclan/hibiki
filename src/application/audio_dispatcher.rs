@@ -2,11 +2,12 @@ use crate::domain::audio::KeyDefine;
 use crate::infrastructure::audio::{LoadedSoundPack, SoundPackLoader};
 use crate::input::keymap::map_evdev_to_mechvibes;
 use anyhow::Result;
+use parking_lot::RwLock;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use rodio::{OutputStream, OutputStreamBuilder, Source};
 use std::path::PathBuf;
 use std::sync::mpsc::SyncSender;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub struct AudioEngine {
     #[allow(dead_code)]
@@ -164,29 +165,29 @@ impl AudioDispatcher {
         let pack_name = path.file_name().map(|n| n.to_string_lossy().to_string());
 
         let pack = SoundPackLoader::load_from_directory(&path)?;
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.pack = Some(pack);
         state.pack_name = pack_name;
         Ok(())
     }
 
     pub fn get_current_pack_name(&self) -> Option<String> {
-        let state = self.state.read().unwrap();
+        let state = self.state.read();
         state.pack_name.clone()
     }
 
     pub fn set_volume(&self, volume: f32) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.volume = volume.clamp(0.0, 1.0);
     }
 
     pub fn set_enabled(&self, enabled: bool) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.enabled = enabled;
     }
 
     pub fn play_key(&self, keycode: u16) {
-        let state = self.state.read().unwrap();
+        let state = self.state.read();
         if !state.enabled {
             return;
         }
@@ -203,7 +204,10 @@ impl AudioDispatcher {
 
             let target_key = if pack.config.defines.contains_key(&raw_key) {
                 Some(raw_key)
-            } else if let Some(mapped) = mapped_key.as_ref().filter(|k| pack.config.defines.contains_key(*k)) {
+            } else if let Some(mapped) = mapped_key
+                .as_ref()
+                .filter(|k| pack.config.defines.contains_key(*k))
+            {
                 Some(mapped.clone())
             } else if pack.config.defines.contains_key(&fallback_key) {
                 // If the key is not defined, use the fallback
@@ -229,7 +233,8 @@ impl AudioDispatcher {
                                     let source = buffer
                                         .to_source_slice(start, duration)
                                         .amplify(state.volume);
-                                    let _ = self.cmd_tx.try_send(PlayCommand::Play(Box::new(source)));
+                                    let _ =
+                                        self.cmd_tx.try_send(PlayCommand::Play(Box::new(source)));
                                 }
                             }
                         }
