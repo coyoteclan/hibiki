@@ -1,4 +1,4 @@
-use crate::domain::config::KeystrokeConfig;
+use crate::domain::config::{KeystrokeConfig, Validate};
 use crate::infrastructure::settings_repository::SettingsRepository;
 use anyhow::Result;
 use std::sync::Arc;
@@ -42,7 +42,8 @@ impl ConfigService {
     /// # Errors
     ///
     /// Returns an error if the configuration cannot be saved to the repository.
-    pub fn update_config(&self, config: KeystrokeConfig) -> Result<()> {
+    pub fn update_config(&self, mut config: KeystrokeConfig) -> Result<()> {
+        config.validate();
         self.repository.save(&config)?;
         self.tx.send_replace(config);
         Ok(())
