@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use keystroke::infrastructure::font_provider::FontProvider;
+use hibiki::infrastructure::font_provider::FontProvider;
 
 fn font_loading_benchmark(c: &mut Criterion) {
     let rt = tokio::runtime::Builder::new_current_thread()

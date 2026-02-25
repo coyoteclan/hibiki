@@ -2,11 +2,11 @@
   mkShell,
   stdenvAdapters,
   cargo-watch,
-  keystroke,
+  hibiki,
 }:
 mkShell.override (old: {
   stdenv = stdenvAdapters.useMoldLinker old.stdenv;
 }) {
-  inputsFrom = [keystroke];
+  inputsFrom = [hibiki];
   packages = [cargo-watch];
 }

@@ -61,14 +61,38 @@ impl KeyDisplayWidget {
     }
 
     fn load_logo_texture() -> Option<Texture> {
-        let settings = gtk4::Settings::default();
-        let is_dark = settings
-            .map(|s| s.is_gtk_application_prefer_dark_theme())
-            .unwrap_or(false);
-        let color = if is_dark { "#ffffff" } else { "#000000" };
+        let (bg_color, fg_color) = {
+            let dummy = gtk4::Label::new(None);
+            #[allow(deprecated)]
+            let style_context = dummy.style_context();
+
+            let to_hex = |rgba: gtk4::gdk::RGBA| {
+                format!(
+                    "#{:02x}{:02x}{:02x}",
+                    (rgba.red() * 255.0) as u8,
+                    (rgba.green() * 255.0) as u8,
+                    (rgba.blue() * 255.0) as u8
+                )
+            };
+
+            #[allow(deprecated)]
+            let fg = style_context
+                .lookup_color("accent_fg_color")
+                .unwrap_or_else(|| gtk4::gdk::RGBA::WHITE);
+
+            #[allow(deprecated)]
+            let bg = style_context
+                .lookup_color("accent_bg_color")
+                .or_else(|| style_context.lookup_color("theme_selected_bg_color"))
+                .unwrap_or_else(|| gtk4::gdk::RGBA::new(0.18, 0.76, 0.49, 1.0));
+
+            (to_hex(bg), to_hex(fg))
+        };
 
         let svg_str = String::from_utf8_lossy(LOGO_SVG);
-        let svg_with_color = svg_str.replace("currentColor", color);
+        let svg_with_color = svg_str
+            .replace("currentColor", &fg_color)
+            .replace("currentBackgroundColor", &bg_color);
 
         let stream = gtk4::gio::MemoryInputStream::from_bytes(&gtk4::glib::Bytes::from(
             svg_with_color.as_bytes(),

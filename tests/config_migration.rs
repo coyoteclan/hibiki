@@ -1,5 +1,5 @@
-use keystroke::domain::config::{KeystrokeConfig, Position};
-use keystroke::infrastructure::settings_repository::SettingsRepository;
+use hibiki::domain::config::{KeystrokeConfig, Position};
+use hibiki::infrastructure::settings_repository::SettingsRepository;
 use std::fs;
 
 #[test]

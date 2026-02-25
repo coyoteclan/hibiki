@@ -20,7 +20,7 @@ pub fn create_launcher_window(
 ) -> ApplicationWindow {
     let window = ApplicationWindow::builder()
         .application(app)
-        .title("Keystroke")
+        .title("Hibiki")
         .default_width(900)
         .default_height(700)
         .resizable(false)
@@ -70,19 +70,31 @@ fn create_launcher_content(
         .margin_bottom(16)
         .build();
 
-    let color = {
-        let rgba = window.color();
-        format!(
-            "#{:02x}{:02x}{:02x}",
-            (rgba.red() * 255.0) as u8,
-            (rgba.green() * 255.0) as u8,
-            (rgba.blue() * 255.0) as u8
-        )
+    let (bg_color, fg_color) = {
+        #[allow(deprecated)]
+        let style_context = window.style_context();
+        let fg = window.color();
+        #[allow(deprecated)]
+        let bg = style_context
+            .lookup_color("theme_bg_color")
+            .unwrap_or(gtk4::gdk::RGBA::new(0.12, 0.12, 0.12, 1.0));
+
+        let to_hex = |rgba: gtk4::gdk::RGBA| {
+            format!(
+                "#{:02x}{:02x}{:02x}",
+                (rgba.red() * 255.0) as u8,
+                (rgba.green() * 255.0) as u8,
+                (rgba.blue() * 255.0) as u8
+            )
+        };
+        (to_hex(bg), to_hex(fg))
     };
-    debug!("Logo color: {}", color);
+    debug!("Logo colors: fg={}, bg={}", fg_color, bg_color);
 
     let svg_str = String::from_utf8_lossy(LOGO_SVG);
-    let svg_with_color = svg_str.replace("currentColor", &color);
+    let svg_with_color = svg_str
+        .replace("currentColor", &fg_color)
+        .replace("currentBackgroundColor", &bg_color);
 
     let stream = gtk4::gio::MemoryInputStream::from_bytes(&gtk4::glib::Bytes::from(
         svg_with_color.as_bytes(),
@@ -107,7 +119,7 @@ fn create_launcher_content(
 
     container.append(&logo_box);
 
-    let title = Label::new(Some("Keystroke"));
+    let title = Label::new(Some("Hibiki"));
     title.add_css_class("header-title");
     container.append(&title);
 

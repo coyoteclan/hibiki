@@ -64,7 +64,7 @@ pub fn create_window(app: &Application, config: &Config) -> Result<ApplicationWi
 
     window.set_layer(Layer::Overlay);
 
-    window.set_namespace("keystroke");
+    window.set_namespace("hibiki");
 
     window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 
@@ -122,7 +122,7 @@ pub fn create_bubble_window(app: &Application, config: &Config) -> Result<Applic
 
     window.set_layer(Layer::Overlay);
 
-    window.set_namespace("keystroke-bubble");
+    window.set_namespace("hibiki-bubble");
 
     window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 

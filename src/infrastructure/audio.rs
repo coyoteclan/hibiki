@@ -107,8 +107,8 @@ pub struct SoundPackLoader;
 const ALLOWED_SOUND_BASES: &[&str] = &[
     "src/assets/sounds",
     "assets/sounds",
-    "/usr/share/keystroke/sounds",
-    "/usr/local/share/keystroke/sounds",
+    "/usr/share/hibiki/sounds",
+    "/usr/local/share/hibiki/sounds",
 ];
 
 impl SoundPackLoader {

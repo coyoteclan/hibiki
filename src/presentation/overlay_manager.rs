@@ -36,7 +36,7 @@ impl OverlayManager {
 
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
-        window.set_namespace("keystroke-osd");
+        window.set_namespace("hibiki-osd");
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 
         window.set_anchor(Edge::Top, false);

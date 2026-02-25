@@ -1,14 +1,14 @@
 use anyhow::Result;
-use keystroke::application::config_service::ConfigService;
-use keystroke::infrastructure::settings_repository::SettingsRepository;
-use keystroke::{app, compositor, input, tray};
+use hibiki::application::config_service::ConfigService;
+use hibiki::infrastructure::settings_repository::SettingsRepository;
+use hibiki::{app, compositor, input, tray};
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 fn main() -> Result<()> {
     init_logging();
 
-    info!("Starting Keystroke v{}", env!("CARGO_PKG_VERSION"));
+    info!("Starting Hibiki v{}", env!("CARGO_PKG_VERSION"));
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -53,8 +53,8 @@ fn main() -> Result<()> {
 }
 
 fn init_logging() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,keystroke=debug"));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,hibiki=debug"));
 
     tracing_subscriber::registry()
         .with(filter)

@@ -14,7 +14,7 @@ impl SettingsRepository {
     pub fn new() -> Result<Self> {
         let config_dir = dirs::config_dir()
             .context("Could not determine config directory")?
-            .join("keystroke");
+            .join("hibiki");
         Ok(Self { config_dir })
     }
 

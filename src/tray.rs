@@ -75,11 +75,11 @@ fn is_keyboard_pixel(x: usize, y: usize, size: usize) -> bool {
 
 impl Tray for KeystrokeTray {
     fn id(&self) -> String {
-        "keystroke".to_string()
+        "hibiki".to_string()
     }
 
     fn title(&self) -> String {
-        "Keystroke".to_string()
+        "Hibiki".to_string()
     }
 
     fn icon_name(&self) -> String {
@@ -99,8 +99,8 @@ impl Tray for KeystrokeTray {
         ksni::ToolTip {
             icon_name: String::new(),
             icon_pixmap: Vec::new(),
-            title: "Keystroke".to_string(),
-            description: format!("Keystroke Visualizer - {}", status),
+            title: "Hibiki".to_string(),
+            description: format!("Hibiki Visualizer - {}", status),
         }
     }
 

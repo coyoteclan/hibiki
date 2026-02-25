@@ -57,7 +57,7 @@ impl App {
     #[must_use]
     pub fn new(config_service: ConfigService) -> Self {
         let gtk_app = Application::builder()
-            .application_id("dev.linuxmobile.keystroke")
+            .application_id("dev.linuxmobile.hibiki")
             .build();
 
         let (audio_engine, audio_dispatcher) = match AudioEngine::new() {

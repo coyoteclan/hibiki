@@ -23,7 +23,7 @@ rustPlatform.buildRustPackage (final: let
   inherit (lib.fileset) toSource unions;
   inherit (lib) licenses platforms;
 in {
-  pname = "keystroke";
+  pname = "hibiki";
   version = "0.1.5";
 
   src = toSource {
@@ -65,15 +65,15 @@ in {
   # Fix for runtime dependencies
   preFixup = ''
     gappsWrapperArgs+=(
-      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath (final.buildInputs ++ [ pipewire libjack2 alsa-lib libpulseaudio ])}"
+      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath (final.buildInputs ++ [pipewire libjack2 alsa-lib libpulseaudio])}"
     )
   '';
 
   meta = {
-    description = "Keystroke - Most beautiful Keystroke visualizer";
-    homepage = "https://github.com/linuxmobile/keystroke";
+    description = "Elevating the tactile dialogue. A high-fidelity visual and auditory companion that gives your keystrokes a modern resonance.";
+    homepage = "https://github.com/linuxmobile/hibiki";
     license = licenses.mit;
-    mainProgram = "keystroke";
+    mainProgram = "hibiki";
     platforms = platforms.unix;
   };
 })

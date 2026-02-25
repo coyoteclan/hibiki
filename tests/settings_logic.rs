@@ -1,6 +1,6 @@
-use keystroke::application::config_service::ConfigService;
-use keystroke::domain::config::{KeystrokeConfig, Position};
-use keystroke::infrastructure::settings_repository::SettingsRepository;
+use hibiki::application::config_service::ConfigService;
+use hibiki::domain::config::{KeystrokeConfig, Position};
+use hibiki::infrastructure::settings_repository::SettingsRepository;
 use std::fs;
 
 #[tokio::test]

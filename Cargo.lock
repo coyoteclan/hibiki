@@ -1138,6 +1138,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "hibiki"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "cpal",
+ "criterion",
+ "dirs",
+ "evdev",
+ "font-kit",
+ "gtk4",
+ "gtk4-layer-shell",
+ "hound",
+ "ksni",
+ "nix 0.29.0",
+ "once_cell",
+ "parking_lot",
+ "rodio",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+ "xkbcommon",
+]
+
+[[package]]
 name = "hound"
 version = "3.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1225,36 +1255,6 @@ checksum = "8c942ebf8e95485ca0d52d97da7c5a2c387d0e7f0ba4c35e93bfcaee045955b3"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "keystroke"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "async-channel",
- "cpal",
- "criterion",
- "dirs",
- "evdev",
- "font-kit",
- "gtk4",
- "gtk4-layer-shell",
- "hound",
- "ksni",
- "nix 0.29.0",
- "once_cell",
- "parking_lot",
- "rodio",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "toml 0.8.23",
- "tracing",
- "tracing-subscriber",
- "xkbcommon",
 ]
 
 [[package]]

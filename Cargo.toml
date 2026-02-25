@@ -1,11 +1,11 @@
 [package]
-name = "keystroke"
+name = "hibiki"
 version = "0.1.5"
 edition = "2021"
 authors = ["linuxmobile"]
-description = "Keystroke - Most beautiful Keystroke visualizer"
+description = "Elevating the tactile dialogue. A high-fidelity visual and auditory companion that gives your keystrokes a modern resonance."
 license = "MIT"
-repository = "https://github.com/linuxmobile/keystroke"
+repository = "https://github.com/linuxmobile/hibiki"
 keywords = ["wayland", "gtk4", "layer-shell", "keyboard", "screencast"]
 categories = ["gui", "visualization"]
 
