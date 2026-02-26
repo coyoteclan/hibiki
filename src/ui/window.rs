@@ -5,9 +5,16 @@ use gtk4::{Application, ApplicationWindow, CssProvider};
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use tracing::info;
 
+fn escape_css_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', " ")
+        .replace('\r', "")
+}
+
 fn generate_overlay_css(config: &Config) -> String {
-    let safe_ks_family = config.font_family.replace('"', "\\\"");
-    let safe_bubble_family = config.bubble.font_family.replace('"', "\\\"");
+    let safe_ks_family = escape_css_string(&config.font_family);
+    let safe_bubble_family = escape_css_string(&config.bubble.font_family);
 
     let ks_radius_px = config.corner_radius * 30.0;
     let ks_radius_str = format!("{:.1}px", ks_radius_px);
@@ -142,4 +149,27 @@ pub fn create_bubble_window(app: &Application, config: &Config) -> Result<Applic
     info!("Created bubble window");
 
     Ok(window)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_escape_css_string() {
+        assert_eq!(escape_css_string("Sans"), "Sans");
+        assert_eq!(
+            escape_css_string("Font \"With\" Quotes"),
+            "Font \\\"With\\\" Quotes"
+        );
+        assert_eq!(
+            escape_css_string("Font\\With\\Backslashes"),
+            "Font\\\\With\\\\Backslashes"
+        );
+        assert_eq!(escape_css_string("Font\nWith\nNewline"), "Font With Newline");
+        assert_eq!(
+            escape_css_string("Injection\"; color: red;"),
+            "Injection\\\"; color: red;"
+        );
+    }
 }
