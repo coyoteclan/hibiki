@@ -3,6 +3,7 @@ use crate::domain::{CaptureState, Command, FocusState};
 use crate::infrastructure::hotkey::GlobalHotKeyManager;
 use evdev::Key;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RoutingResult {
     Ignored,
     Dispatch(Key, bool),
@@ -126,5 +127,162 @@ impl RoutingEngine {
     pub fn reset_mode_state(&mut self) {
         self.capture_state = CaptureState::Active;
         self.focus_state = FocusState::Focused;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::config::DisplayMode;
+    use crate::domain::{CaptureState, FocusState};
+    use evdev::Key;
+
+    fn setup_engine() -> RoutingEngine {
+        let mut engine = RoutingEngine::new();
+        engine.update_config(
+            "<Shift><Control>k",
+            "<Shift><Control>b",
+            "<Control>p",
+            "<Control>f",
+        );
+        engine
+    }
+
+    #[test]
+    fn test_initial_state() {
+        let engine = RoutingEngine::new();
+        let (capture, focus) = engine.get_states();
+        assert_eq!(capture, CaptureState::Active);
+        assert_eq!(focus, FocusState::Focused);
+    }
+
+    #[test]
+    fn test_basic_dispatch() {
+        let mut engine = setup_engine();
+        let result = engine.process(Key::KEY_A, true, true, DisplayMode::Keystroke);
+        assert_eq!(result, RoutingResult::Dispatch(Key::KEY_A, true));
+    }
+
+    #[test]
+    fn test_mode_switch() {
+        let mut engine = setup_engine();
+
+        engine.process(Key::KEY_LEFTSHIFT, true, true, DisplayMode::Keystroke);
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Keystroke);
+        let result = engine.process(Key::KEY_K, true, true, DisplayMode::Keystroke);
+        assert_eq!(result, RoutingResult::Ignored);
+
+        engine.reset_hotkey_state();
+
+        engine.process(Key::KEY_LEFTSHIFT, true, true, DisplayMode::Keystroke);
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Keystroke);
+        let result = engine.process(Key::KEY_B, true, true, DisplayMode::Keystroke);
+        assert_eq!(result, RoutingResult::SwitchMode(DisplayMode::Bubble));
+
+        engine.reset_hotkey_state();
+
+        engine.process(Key::KEY_LEFTSHIFT, true, true, DisplayMode::Bubble);
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Bubble);
+        let result = engine.process(Key::KEY_B, true, true, DisplayMode::Bubble);
+        assert_eq!(result, RoutingResult::Ignored);
+
+        engine.reset_hotkey_state();
+
+        engine.process(Key::KEY_LEFTSHIFT, true, true, DisplayMode::Bubble);
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Bubble);
+        let result = engine.process(Key::KEY_K, true, true, DisplayMode::Bubble);
+        assert_eq!(result, RoutingResult::SwitchMode(DisplayMode::Keystroke));
+    }
+
+    #[test]
+    fn test_toggle_pause() {
+        let mut engine = setup_engine();
+
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Keystroke);
+        let result = engine.process(Key::KEY_P, true, true, DisplayMode::Keystroke);
+        assert_eq!(
+            result,
+            RoutingResult::StateChanged(CaptureState::Paused, FocusState::Focused)
+        );
+
+        let result = engine.process(Key::KEY_A, true, true, DisplayMode::Keystroke);
+        assert_eq!(result, RoutingResult::Ignored);
+
+        engine.reset_hotkey_state();
+
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Keystroke);
+        let result = engine.process(Key::KEY_P, true, true, DisplayMode::Keystroke);
+        assert_eq!(
+            result,
+            RoutingResult::StateChanged(CaptureState::Active, FocusState::Focused)
+        );
+
+        let result = engine.process(Key::KEY_A, true, true, DisplayMode::Keystroke);
+        assert_eq!(result, RoutingResult::Dispatch(Key::KEY_A, true));
+    }
+
+    #[test]
+    fn test_toggle_focus() {
+        let mut engine = setup_engine();
+
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Keystroke);
+        let result = engine.process(Key::KEY_F, true, true, DisplayMode::Keystroke);
+        assert_eq!(
+            result,
+            RoutingResult::StateChanged(CaptureState::Active, FocusState::Unfocused)
+        );
+
+        engine.reset_hotkey_state();
+
+        engine.process(Key::KEY_LEFTCTRL, true, true, DisplayMode::Keystroke);
+        let result = engine.process(Key::KEY_F, true, true, DisplayMode::Keystroke);
+        assert_eq!(
+            result,
+            RoutingResult::StateChanged(CaptureState::Active, FocusState::Focused)
+        );
+    }
+
+    #[test]
+    fn test_toggle_focus_disabled() {
+        let mut engine = setup_engine();
+
+        engine.process(Key::KEY_LEFTCTRL, true, false, DisplayMode::Keystroke);
+        let result = engine.process(Key::KEY_F, true, false, DisplayMode::Keystroke);
+
+        assert_eq!(result, RoutingResult::Dispatch(Key::KEY_F, true));
+
+        let (_, focus) = engine.get_states();
+        assert_eq!(focus, FocusState::Focused);
+    }
+
+    #[test]
+    fn test_bubble_mode_unfocused_behavior() {
+        let mut engine = setup_engine();
+
+        engine.toggle_focus();
+
+        let result = engine.process(Key::KEY_A, true, true, DisplayMode::Bubble);
+        assert_eq!(result, RoutingResult::Ignored);
+
+        let result = engine.process(Key::KEY_A, true, true, DisplayMode::Keystroke);
+        assert_eq!(result, RoutingResult::Dispatch(Key::KEY_A, true));
+    }
+
+    #[test]
+    fn test_reset_state() {
+        let mut engine = setup_engine();
+
+        engine.toggle_capture();
+        engine.toggle_focus();
+        assert_eq!(
+            engine.get_states(),
+            (CaptureState::Paused, FocusState::Unfocused)
+        );
+
+        engine.reset_mode_state();
+        assert_eq!(
+            engine.get_states(),
+            (CaptureState::Active, FocusState::Focused)
+        );
     }
 }
