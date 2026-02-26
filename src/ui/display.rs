@@ -241,18 +241,20 @@ impl KeyDisplayWidget {
         let now = Instant::now();
         let display_duration = self.display_duration;
 
-        let expired: Vec<usize> = self
-            .displayed_keys
-            .iter()
-            .enumerate()
-            .filter(|(_, dk)| !dk.is_held && now.duration_since(dk.last_active) > display_duration)
-            .map(|(i, _)| i)
-            .collect();
-
-        for &i in expired.iter().rev() {
-            if let Some(removed) = self.displayed_keys.remove(i) {
-                self.container.remove(&removed.widget);
+        let mut to_remove = Vec::new();
+        self.displayed_keys.retain(|dk| {
+            let is_expired =
+                !dk.is_held && now.saturating_duration_since(dk.last_active) > display_duration;
+            if is_expired {
+                to_remove.push(dk.widget.clone());
+                false
+            } else {
+                true
             }
+        });
+
+        for widget in to_remove {
+            self.container.remove(&widget);
         }
     }
 
