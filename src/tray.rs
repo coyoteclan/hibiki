@@ -13,9 +13,18 @@ pub enum TrayAction {
     Quit,
 }
 
-#[derive(Default)]
 pub struct TrayState {
     pub paused: bool,
+    pub icon_pixmap: Vec<Icon>,
+}
+
+impl Default for TrayState {
+    fn default() -> Self {
+        Self {
+            paused: false,
+            icon_pixmap: generate_icon_pixmap(),
+        }
+    }
 }
 
 struct KeystrokeTray {
@@ -83,11 +92,14 @@ impl Tray for KeystrokeTray {
     }
 
     fn icon_name(&self) -> String {
-        "input-keyboard-symbolic".to_string()
+        String::new()
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
-        generate_icon_pixmap()
+        self.state
+            .lock()
+            .map(|s| s.icon_pixmap.clone())
+            .unwrap_or_else(|_| generate_icon_pixmap())
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
@@ -175,6 +187,14 @@ impl TrayHandle {
     pub fn set_paused(&self, paused: bool) {
         if let Ok(mut state) = self.state.lock() {
             state.paused = paused;
+        }
+
+        self.service_handle.update(|_| {});
+    }
+
+    pub fn set_icon(&self, icon: Vec<Icon>) {
+        if let Ok(mut state) = self.state.lock() {
+            state.icon_pixmap = icon;
         }
 
         self.service_handle.update(|_| {});

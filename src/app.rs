@@ -282,14 +282,66 @@ fn setup_tray_handling(
     tray_rx: Receiver<TrayAction>,
     tray_handle: TrayHandle,
 ) {
-    let tray_handle = Rc::new(tray_handle);
+    let tray_handle = Arc::new(tray_handle);
 
+    // Initial icon update
+    let config = config_service.get_config();
+    update_tray_icon(&tray_handle, &config);
+
+    // Watch for config changes
+    let mut config_rx = config_service.subscribe();
+    let tray_handle_c = Arc::clone(&tray_handle);
+    glib::MainContext::default().spawn_local(async move {
+        while config_rx.changed().await.is_ok() {
+            let config = config_rx.borrow().clone();
+            update_tray_icon(&tray_handle_c, &config);
+        }
+    });
+
+    // Watch for system theme changes
+    let tray_handle_t = Arc::clone(&tray_handle);
+    let config_service_t = config_service.clone();
+    if let Some(settings) = gtk4::Settings::default() {
+        settings.connect_notify(
+            Some("gtk-application-prefer-dark-theme"),
+            move |_, _| {
+                let config = config_service_t.get_config();
+                update_tray_icon(&tray_handle_t, &config);
+            },
+        );
+    }
+
+    let tray_handle_a = Arc::clone(&tray_handle);
     glib::MainContext::default().spawn_local(async move {
         while let Ok(action) = tray_rx.recv().await {
-            handle_tray_action(&action, &state, &config_service, &app, &tray_handle);
+            handle_tray_action(&action, &state, &config_service, &app, &tray_handle_a);
         }
         debug!("Tray event loop terminated");
     });
+}
+
+fn update_tray_icon(tray_handle: &Arc<TrayHandle>, config: &crate::domain::config::KeystrokeConfig) {
+    let is_dark = match config.keystroke_theme.as_str() {
+        "dark" => true,
+        "light" => false,
+        _ => {
+            // "system" - check GTK settings
+            gtk4::Settings::default()
+                .map(|s| s.is_gtk_application_prefer_dark_theme())
+                .unwrap_or(true)
+        }
+    };
+
+    let theme = if is_dark {
+        crate::ui::IconTheme::Dark
+    } else {
+        crate::ui::IconTheme::Light
+    };
+
+    let icon = crate::ui::render_tray_icon(theme);
+    if !icon.is_empty() {
+        tray_handle.set_icon(icon);
+    }
 }
 
 fn handle_tray_action(
@@ -297,7 +349,7 @@ fn handle_tray_action(
     state: &Rc<RefCell<RuntimeState>>,
     config_service: &ConfigService,
     app: &Application,
-    tray_handle: &Rc<TrayHandle>,
+    tray_handle: &Arc<TrayHandle>,
 ) {
     match action {
         TrayAction::ShowLauncher => {

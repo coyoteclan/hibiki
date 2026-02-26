@@ -1148,6 +1148,7 @@ dependencies = [
  "dirs",
  "evdev",
  "font-kit",
+ "gdk-pixbuf",
  "gtk4",
  "gtk4-layer-shell",
  "hound",
