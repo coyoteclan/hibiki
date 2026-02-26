@@ -110,7 +110,9 @@ fn create_font_selector(
     let factory = SignalListItemFactory::new();
 
     factory.connect_setup(move |_, list_item| {
-        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let list_item = list_item
+            .downcast_ref::<gtk4::ListItem>()
+            .expect("list_item must be a gtk4::ListItem");
         let row_box = GtkBox::new(Orientation::Horizontal, 12);
         row_box.set_margin_start(12);
         row_box.set_margin_end(12);
@@ -125,15 +127,23 @@ fn create_font_selector(
     });
 
     factory.connect_bind(move |_, list_item| {
-        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let list_item = list_item
+            .downcast_ref::<gtk4::ListItem>()
+            .expect("list_item must be a gtk4::ListItem");
         let string_obj = list_item
             .item()
             .and_downcast::<gtk4::StringObject>()
-            .unwrap();
+            .expect("item must be a gtk4::StringObject");
         let font_name = string_obj.string();
 
-        let row_box = list_item.child().and_downcast::<GtkBox>().unwrap();
-        let label = row_box.first_child().and_downcast::<Label>().unwrap();
+        let row_box = list_item
+            .child()
+            .and_downcast::<GtkBox>()
+            .expect("child must be a GtkBox");
+        let label = row_box
+            .first_child()
+            .and_downcast::<Label>()
+            .expect("first_child must be a Label");
 
         label.set_label(&font_name);
     });
@@ -205,7 +215,9 @@ fn create_font_selector(
     search_entry.connect_search_changed(move |entry| {
         let text = entry.text().to_lowercase();
         filter_c.set_filter_func(move |item| {
-            let string_obj = item.downcast_ref::<gtk4::StringObject>().unwrap();
+            let string_obj = item
+                .downcast_ref::<gtk4::StringObject>()
+                .expect("item must be a gtk4::StringObject");
             let font_name = string_obj.string().to_lowercase();
             font_name.contains(&text)
         });
@@ -215,7 +227,9 @@ fn create_font_selector(
 
     selection_model.connect_selected_item_notify(move |model| {
         if let Some(item) = model.selected_item() {
-            let string_obj = item.downcast::<gtk4::StringObject>().unwrap();
+            let string_obj = item
+                .downcast::<gtk4::StringObject>()
+                .expect("item must be a gtk4::StringObject");
             let name = string_obj.string();
 
             let mut cfg = service_c.get_config();
@@ -1250,7 +1264,9 @@ where
     let display_names = Rc::new(RefCell::new(HashMap::<String, String>::new()));
 
     factory.connect_setup(move |_, list_item| {
-        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let list_item = list_item
+            .downcast_ref::<gtk4::ListItem>()
+            .expect("list_item must be a gtk4::ListItem");
         let row_box = GtkBox::new(Orientation::Horizontal, 12);
         row_box.set_margin_start(12);
         row_box.set_margin_end(12);
@@ -1266,15 +1282,23 @@ where
 
     let display_names_c = display_names.clone();
     factory.connect_bind(move |_, list_item| {
-        let list_item = list_item.downcast_ref::<gtk4::ListItem>().unwrap();
+        let list_item = list_item
+            .downcast_ref::<gtk4::ListItem>()
+            .expect("list_item must be a gtk4::ListItem");
         let string_obj = list_item
             .item()
             .and_downcast::<gtk4::StringObject>()
-            .unwrap();
+            .expect("item must be a gtk4::StringObject");
         let pack_id = string_obj.string();
 
-        let row_box = list_item.child().and_downcast::<GtkBox>().unwrap();
-        let label = row_box.first_child().and_downcast::<Label>().unwrap();
+        let row_box = list_item
+            .child()
+            .and_downcast::<GtkBox>()
+            .expect("child must be a GtkBox");
+        let label = row_box
+            .first_child()
+            .and_downcast::<Label>()
+            .expect("first_child must be a Label");
 
         let name = if let Ok(map) = display_names_c.try_borrow() {
             let map: &HashMap<String, String> = &map;
@@ -1361,7 +1385,9 @@ where
     search_entry.connect_search_changed(move |entry| {
         let text = entry.text().to_lowercase();
         filter_c.set_filter_func(move |item| {
-            let string_obj = item.downcast_ref::<gtk4::StringObject>().unwrap();
+            let string_obj = item
+                .downcast_ref::<gtk4::StringObject>()
+                .expect("item must be a gtk4::StringObject");
             let pack_id = string_obj.string().to_lowercase();
             pack_id.contains(&text)
         });
@@ -1370,7 +1396,9 @@ where
     let update_c = update_fn.clone();
     selection_model.connect_selected_item_notify(move |model| {
         if let Some(item) = model.selected_item() {
-            let string_obj = item.downcast::<gtk4::StringObject>().unwrap();
+            let string_obj = item
+                .downcast::<gtk4::StringObject>()
+                .expect("item must be a gtk4::StringObject");
             let id = string_obj.string();
             let id_clone = id.clone();
 
